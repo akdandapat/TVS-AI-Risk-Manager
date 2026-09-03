@@ -6,7 +6,7 @@ from sklearn.metrics import roc_auc_score, average_precision_score
 
 OUT = os.environ.get("SENTINEL_OUT", "/home/claude/sentinel/artifacts")
 
-DROP = {"seller_id", "snapshot", "category", "target",
+DROP = {"seller_id", "snapshot", "category", "target", "date",
         "fut_bad", "fut_n", "fut_financed", "fut_bad_financed"}
 
 
@@ -116,8 +116,28 @@ def train(panel):
                "pct_loss_captured": float(loss_avoided / total_loss) if total_loss else 0.0,
                **lt}
 
+    # --- naive persistence baseline (the question every good judge asks)
+    nb = te["bad_rate"].fillna(0).values
+    kk = max(int(0.20 * len(te)), 1)
+    metrics["baseline_auc"] = float(roc_auc_score(yte, nb))
+    metrics["baseline_lift20"] = float(
+        yte.iloc[np.argsort(-nb)[:kk]].mean() / base)
+    metrics["sentinel_lift20"] = float(
+        yte.iloc[np.argsort(-prob)[:kk]].mean() / base)
+
+    # --- walk-forward validation + blended scorer
+    from scorer import walk_forward, RiskScorer, _fit_ensemble
+    wf_df, wf = walk_forward(panel, feats)
+    metrics.update(wf)
+
+    from scorer import eb_shrink
+    models = _fit_ensemble(tr, feats)
+    ref_prob = np.mean([mm.predict_proba(tr[feats].astype(float))[:, 1]
+                        for mm in models], axis=0)
+    scorer = RiskScorer(models, feats, ref_prob, eb_shrink(tr))
+
     import pickle
-    pickle.dump({"model": model, "features": feats},
+    pickle.dump({"model": model, "features": feats, "scorer": scorer},
                 open(f"{OUT}/model.pkl", "wb"))
-    return {"model": model, "features": feats, "metrics": metrics,
-            "importance": imp, "test": te2}
+    return {"model": model, "scorer": scorer, "features": feats,
+            "metrics": metrics, "importance": imp, "test": te2}

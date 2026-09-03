@@ -10,21 +10,47 @@ Built on the **real Olist Brazilian E-Commerce dataset** — 98,666 orders, 3,09
 
 ---
 
-## Headline results (out-of-sample, time-based split)
+## Headline results
 
-| Metric | Value |
+**Purged walk-forward across 24 expanding-window folds**, against two baselines.
+
+| Scorer | Mean AUC | Verdict |
+|---|---|---|
+| **SENTINEL** (0.30 model + 0.70 shrunk rate) | **0.6567** | wins 18/24 folds, **p = 0.0024** |
+| Empirical-Bayes shrunk rate alone | 0.6451 | strong, simple |
+| Raw bad rate (naive persistence) | 0.6363 | the baseline to beat |
+| Gradient-boosted model alone | 0.6181 | **worst of the four** |
+
+| Business metric | Value |
 |---|---|
-| **Early-warning lead time (median)** | **28 days** |
-| **Deteriorating merchants caught early** | **50%** (87 of 174 eligible) |
-| Top-decile lift | **2.19x** |
-| Precision at 0.60 threshold | 31.5% vs 12.1% base — **2.60x lift** |
-| Financed value in bad orders captured | **23%** (R$ 106,590 of R$ 464,642) |
-| ROC-AUC | 0.658 |
-| Model | LightGBM, 45 features, trained ≤ 2018-04-07, tested strictly after |
+| **Early-warning lead time (median)** | **35 days** |
+| **Deteriorating merchants caught early** | **57%** (125 of 220) |
+| Financed value in bad orders captured | **19%** |
+| Modelled annual saving, Rs 500 Cr book | **~Rs 5.1 Cr** |
 
-**Read the lead time, not the AUC.** A risk committee does not act on AUC. It acts on
-"which 10% of my merchant book do I review this week, and how many days of warning do I get."
-We give 28 days and 2.19x concentration.
+### Read this before you read the numbers
+
+Three findings shaped this project more than any modelling choice.
+
+**1. The naive baseline is strong.** Ranking merchants by their current bad rate scores
+0.636. Any early-warning system that cannot beat one column of arithmetic
+does not deserve to exist. We tested it first, not last.
+
+**2. Our first validation was wrong.** An earlier version reported AUC 0.700, winning 11 of
+12 folds. That was measured without purging: training snapshots whose 30-day outcome window
+overlapped the test window leaked future information. After adding the purge, the same model
+scored 0.640 and won 2 of 12 — it did not beat the baseline at all. The number in this README
+is the purged one.
+
+**3. What finally beat it was shrinkage, not the model.** A merchant with six orders at a 33%
+bad rate is mostly noise. Empirical-Bayes shrinkage pulls each rate toward what that merchant's
+own product-and-region mix predicts, in proportion to how little volume backs it. That alone
+beats naive persistence (0.6451, p < 0.05). The gradient-boosted model earns its
+place as a 30% correction on top — not as a replacement. Every blend weight from 0.2 to 0.5
+beats the baseline significantly, so the choice is not knife-edge.
+
+We also built and **rejected** an exposure-weighted target scoring AUC 0.855, because the single
+column `financed_value` scored 0.858 on it. It was predicting merchant size, not risk.
 
 ---
 
@@ -45,10 +71,22 @@ We give 28 days and 2.19x concentration.
    % ≥6 installments, financed value), concentration (top-customer share, repeat rate),
    and **category-peer z-scores** that catch a merchant drifting from its own category norm.
 
-4. **Collusion graph.** Bipartite merchant ↔ `customer_unique_id` network; 44 merchant pairs
+4. **Blended percentile scorer.** Final score = 0.75 x percentile(model probability)
+   + 0.25 x percentile(observed bad rate), with the weight chosen on a held-out
+   validation slice that never touched the test set. Percentiles are taken against
+   frozen reference distributions, so a single merchant can be scored in isolation
+   in real time, not only in a batch. Risk bands are book positions: CRITICAL is the
+   top 5% of the merchant book, HIGH the next 10%, WATCH the next 15%.
+
+5. **Automated risk memo.** Every merchant gets an analyst-style written assessment
+   naming its drivers against peer norms, complaint mix, trajectory and binding action.
+   Generated deterministically from model outputs and benchmarks, so it is fully
+   auditable and cannot hallucinate a number that is not in the data.
+
+6. **Collusion graph.** Bipartite merchant ↔ `customer_unique_id` network; 44 merchant pairs
    share an abnormal number of unique customers — the fake-transaction ring signal.
 
-5. **Action layer.** The differentiator. Score → risk band → *exposure multiplier, max EMI
+7. **Action layer.** The differentiator. Score → risk band → *exposure multiplier, max EMI
    tenure, holdback %*. CRITICAL suspends new financing; HIGH caps at 25% of current exposure,
    3-month tenure, 15% holdback; WATCH caps at 60%, 6-month tenure, 7% holdback.
 
@@ -95,8 +133,16 @@ one dictionary swap.
 pip install -r requirements.txt
 bash get_data.sh          # pulls the 7 Olist tables into ./data
 python pipeline.py        # ~90s: builds panel, trains, scores, writes artifacts/
-streamlit run app.py      # dashboard
+uvicorn serve:app --port 8000   # risk register UI + scoring API  -> open http://localhost:8000
+streamlit run app.py            # optional analyst view
 ```
+
+The UI is served at `/`, the API under `/score`, `/watchlist` and `/health`. Fonts are vendored
+locally and all charts are hand-rolled SVG, so the demo needs **no internet connection**.
+
+**API** — proves LMS integration. `POST /score {"seller_id": "..."}` returns score, band,
+approved limit, max tenure, holdback, an APPROVE/REFER/DECLINE decision and the written
+memo. `GET /watchlist?band=HIGH` returns the review queue. `GET /health` for liveness.
 
 Dashboard views: Command Centre · Merchant Deep-Dive (SHAP + trajectory) ·
 Early-Warning Alerts (exportable CSV) · Collusion Graph · Product & Category Risk ·
@@ -108,10 +154,11 @@ Model Validation.
 
 - **Weak supervision.** The bad-order label is constructed, not ground truth. We do not
   claim it equals return fraud. It is a defensible proxy for merchant-driven portfolio loss.
-- **AUC 0.658 is the honest ceiling on this data.** We tested order-level models,
-  autoregressive lag features, and three alternative label definitions; a large share of
-  merchant badness is logistics randomness and is not predictable from purchase-time
-  information. We report ranking quality and lead time instead of inflating a headline.
+- **AUC ~0.66 is the honest ceiling on this data.** We tested order-level models,
+  autoregressive lag features, five alternative label definitions and a hyperparameter
+  sweep. A large share of merchant badness is logistics randomness that is not predictable
+  from past behaviour. We report ranking quality, lead time and a significance test against
+  two baselines rather than inflating a headline.
 - **Brazilian proxy data**, chosen because it is the only public source carrying merchant,
   fulfilment, review and EMI-installment fields in one relational schema.
 - **No leakage.** Every feature is computed from a strictly past window; the train/test

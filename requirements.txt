@@ -1,8 +1,11 @@
-pandas>=2.0
-numpy
-scikit-learn
+fastapi
 lightgbm
-shap
-pyarrow
-streamlit
+numpy
+pandas>=2.0
 plotly
+pyarrow
+scikit-learn
+scipy
+shap
+streamlit
+uvicorn

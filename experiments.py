@@ -80,7 +80,6 @@ def purged_wf(panel, horizon, depth=0.20, start=0.45, step=2, seeds=3):
 
 
 def run_one(LB, HZ, ST, MT, om, cx):
-    global results
     P.LOOKBACK, P.HORIZON, P.STEP, P.MIN_ORDERS_TARGET = LB, HZ, ST, MT
     globals()["LB"] = LB
     pan = P.build_panel(om, cx)

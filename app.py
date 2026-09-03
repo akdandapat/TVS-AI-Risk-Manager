@@ -37,13 +37,14 @@ def load():
     p = pd.read_parquet(f"{A}/panel.parquet")
     o = pd.read_parquet(f"{A}/order_master.parquet")
     e = pd.read_csv(f"{A}/collusion_edges.csv")
+    w = pd.read_csv(f"{A}/walkforward.csv")
     i = pd.read_csv(f"{A}/feature_importance.csv", index_col=0)
     b = pickle.load(open(f"{A}/model.pkl", "rb"))
-    return m, s, p, o, e, i, b
+    return m, s, p, o, e, i, b, w
 
 
-M, S, P, OM, E, IMP, BUNDLE = load()
-MODEL, FEATS = BUNDLE["model"], BUNDLE["features"]
+M, S, P, OM, E, IMP, BUNDLE, WF = load()
+MODEL, FEATS, SCORER = BUNDLE["model"], BUNDLE["features"], BUNDLE["scorer"]
 
 st.title("SENTINEL")
 st.caption("Intelligent Merchant & Product Risk Engine  ·  TVS Credit E.P.I.C 8.0 — PS (g)  "
@@ -55,8 +56,9 @@ page = st.sidebar.radio("View", ["Command Centre", "Merchant Deep-Dive",
 st.sidebar.markdown("---")
 st.sidebar.metric("Portfolio exposure at risk", f"R$ {M['exposure_at_risk']:,.0f}")
 st.sidebar.metric("Early-warning lead time", f"{M['median_lead_days']:.0f} days")
-st.sidebar.caption(f"Model: {M['engine']} · AUC {M['roc_auc']:.3f} · "
-                   f"decile lift {M['top_decile_lift']:.2f}x")
+st.sidebar.caption(f"{M['engine']} · walk-forward AUC {M['wf_sentinel_auc']:.3f} "
+                   f"vs {M['wf_naive_auc']:.3f} baseline · "
+                   f"wins {M['wf_auc_wins']}/{M['wf_folds']} folds (p={M['wf_pvalue']:.3f})")
 
 
 # ------------------------------------------------------------- COMMAND CENTRE
@@ -96,7 +98,7 @@ if page == "Command Centre":
         for _, x in S.head(10).iterrows():
             st.markdown(
                 f"<div class='band-{x.risk_band}'><b>{x.seller_id[:12]}…</b> "
-                f"&nbsp;<code>{x.risk_prob:.0%}</code> &nbsp;<b>{x.risk_band}</b><br>"
+                f"&nbsp;<code>{x.sentinel_score:.2f}</code> &nbsp;<b>{x.risk_band}</b><br>"
                 f"<small>{x.recommendation}<br>Exposure R$ {x.current_exposure:,.0f} "
                 f"→ revised limit R$ {x.revised_limit:,.0f}</small></div>",
                 unsafe_allow_html=True)
@@ -125,7 +127,7 @@ elif page == "Merchant Deep-Dive":
                        f"({S.set_index('seller_id').loc[x,'risk_band']})")
     row = S.set_index("seller_id").loc[sid]
     c = st.columns(5)
-    c[0].metric("Risk probability", f"{row.risk_prob:.1%}")
+    c[0].metric("SENTINEL score", f"{row.sentinel_score:.2f}")
     c[1].metric("Band", row.risk_band)
     c[2].metric("Bad rate (90d)", f"{row.bad_rate:.1%}")
     c[3].metric("Orders (90d)", int(row.n_orders))
@@ -136,6 +138,16 @@ elif page == "Merchant Deep-Dive":
                 f"<b>R$ {row.revised_limit:,.0f}</b> · max tenure "
                 f"<b>{int(row.max_tenure_months)} months</b> · holdback "
                 f"<b>{row.holdback_pct:.0%}</b></div>", unsafe_allow_html=True)
+
+    st.subheader("Automated risk memo")
+    from scorer import narrative
+    peer = S[FEATS].mean()
+    st.markdown(f"<div style='background:#141924;border:1px solid #222938;"
+                f"border-radius:10px;padding:16px 20px;line-height:1.6'>"
+                f"{narrative(row.to_dict() | {'seller_id': sid}, peer)}</div>",
+                unsafe_allow_html=True)
+    st.caption("Generated from model drivers and peer benchmarks — deterministic and "
+               "auditable, so it cannot hallucinate a number that is not in the data.")
 
     l, r = st.columns(2)
     with l:
@@ -191,11 +203,11 @@ elif page == "Early-Warning Alerts":
     band = st.multiselect("Bands", ["CRITICAL", "HIGH", "WATCH"],
                           default=["CRITICAL", "HIGH"])
     v = S[S.risk_band.isin(band)][
-        ["seller_id", "risk_prob", "risk_band", "bad_rate", "late_rate",
+        ["seller_id", "sentinel_score", "risk_band", "bad_rate", "late_rate",
          "cancel_rate", "n_orders", "current_exposure", "revised_limit",
          "max_tenure_months", "holdback_pct", "recommendation"]]
     st.dataframe(v.style.format({
-        "risk_prob": "{:.1%}", "bad_rate": "{:.1%}", "late_rate": "{:.1%}",
+        "sentinel_score": "{:.2f}", "bad_rate": "{:.1%}", "late_rate": "{:.1%}",
         "cancel_rate": "{:.1%}", "current_exposure": "R$ {:,.0f}",
         "revised_limit": "R$ {:,.0f}", "holdback_pct": "{:.0%}"}),
         use_container_width=True, height=520, hide_index=True)
@@ -211,7 +223,7 @@ elif page == "Collusion Graph":
     nodes = pd.unique(top[["seller_id_x", "seller_id_y"]].values.ravel())
     ang = np.linspace(0, 2 * np.pi, len(nodes), endpoint=False)
     pos = {n: (np.cos(a), np.sin(a)) for n, a in zip(nodes, ang)}
-    risk = S.set_index("seller_id")["risk_prob"].to_dict()
+    risk = S.set_index("seller_id")["sentinel_score"].to_dict()
     ex, ey = [], []
     for _, r in top.iterrows():
         x0, y0 = pos[r.seller_id_x]; x1, y1 = pos[r.seller_id_y]
@@ -277,6 +289,42 @@ else:
     c[1].metric("Top-decile lift", f"{M['top_decile_lift']:.2f}x")
     c[2].metric("Median lead time", f"{M['median_lead_days']:.0f} d")
     c[3].metric("Caught early", f"{M['pct_caught_early']:.0%}")
+
+    st.markdown("#### Walk-forward backtest — does it beat naive persistence?")
+    st.caption("The obvious challenge to any early-warning model is: *why not just sort "
+               "merchants by their current bad rate?* We tested exactly that across "
+               f"{M['wf_folds']} PURGED expanding-window folds. The primary UI is the "
+               "risk register at `uvicorn serve:app` — this view is for analysts.")
+    c = st.columns(4)
+    c[0].metric("SENTINEL AUC", f"{M['wf_sentinel_auc']:.3f}",
+                f"+{M['wf_sentinel_auc']-M['wf_naive_auc']:.3f} vs baseline")
+    c[1].metric("Naive baseline AUC", f"{M['wf_naive_auc']:.3f}")
+    c[2].metric("Folds won", f"{M['wf_auc_wins']}/{M['wf_folds']}")
+    c[3].metric("Paired t-test", f"p = {M['wf_pvalue']:.3f}")
+    fig = go.Figure()
+    fig.add_scatter(x=WF.fold, y=WF.sentinel_auc, name="SENTINEL",
+                    line=dict(color="#2ecc71", width=3), mode="lines+markers")
+    fig.add_scatter(x=WF.fold, y=WF.naive_auc, name="Naive bad-rate baseline",
+                    line=dict(color="#f2385a", width=2, dash="dot"), mode="lines+markers")
+    fig.update_layout(height=330, paper_bgcolor="rgba(0,0,0,0)",
+                      plot_bgcolor="rgba(0,0,0,0)", font_color="#e6e9ef",
+                      yaxis_title="AUC", margin=dict(l=0, r=0, t=10, b=0))
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("#### Business case on an Indian book")
+    R = M["roi_inr"]
+    pf = st.slider("Consumer-durable portfolio size (INR Cr)", 100, 2000, 500, 50)
+    from scorer import roi as _roi
+    eff = st.slider("Intervention efficacy (share of flagged loss actually avoided)",
+                    0.10, 0.60, 0.35, 0.05)
+    r2 = _roi(M, portfolio_inr_cr=pf, recovery=eff)
+    c = st.columns(4)
+    c[0].metric("Gross bad-order loss", f"Rs {r2['gross_loss_inr_cr']:.1f} Cr")
+    c[1].metric("Addressable (model-captured)", f"Rs {r2['addressable_inr_cr']:.1f} Cr")
+    c[2].metric("Realistic annual saving", f"Rs {r2['annual_saving_inr_cr']:.1f} Cr")
+    c[3].metric("Loss share captured", f"{M['pct_loss_captured']:.0%}")
+    st.caption("Assumes the observed 15.2% bad-order rate and the model's measured "
+               f"{M['pct_loss_captured']:.0%} capture of financed value in bad orders.")
 
     st.markdown("#### Operating points")
     ops = pd.DataFrame(M["operating_points"]).T.reset_index()

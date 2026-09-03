@@ -19,7 +19,7 @@ LATE_TOLERANCE_DAYS = 5
 BAD_RATE_THRESHOLD = 0.25      # next-30d bad rate that defines "deteriorated"
 MIN_ORDERS_FEATURE = 5         # seller must have >=5 orders in lookback
 MIN_ORDERS_TARGET = 8          # and >=8 forward (label-noise control)
-LOOKBACK, HORIZON, STEP = 90, 30, 14
+LOOKBACK, HORIZON, STEP = 90, 30, 7
 
 
 # ---------------------------------------------------------------- 1. LOAD
@@ -115,7 +115,26 @@ def build_order_master(orders, items, prods, custs, pays, revs, sell):
     o["financed_value"] = np.where(o["installments"].fillna(1) >= 2,
                                    o["payment_value"].fillna(0), 0.0)
     o["date"] = o["order_purchase_timestamp"]
+    o = add_expected(o)
     return o, cx_cols
+
+
+def add_expected(om):
+    """Leak-free expected badness from the ORDER MIX (category / region / price band).
+
+    Separates "this merchant is bad" from "this merchant sells hard categories into
+    hard regions". Every rate uses strictly prior orders only.
+    """
+    om = om.sort_values("date").reset_index(drop=True)
+    om["price_bkt"] = pd.qcut(om["price"].rank(method="first"), 10,
+                              labels=False, duplicates="drop")
+    parts = []
+    for key in ["category", "customer_state", "price_bkt"]:
+        r = om.groupby(key)["is_bad"].transform(lambda s: s.shift(1).expanding().mean())
+        parts.append(r)
+    om["exp_bad"] = pd.concat(parts, axis=1).mean(axis=1)
+    om["exp_bad"] = om["exp_bad"].fillna(om["is_bad"].mean())
+    return om
 
 
 # ------------------------------------------------------- 3. PANEL BUILDER
@@ -193,6 +212,8 @@ def build_panel(om, cx_cols):
         if df.empty:
             continue
         df["snapshot"] = t
+        df["exp_bad"] = win.groupby("seller_id")["exp_bad"].mean().reindex(df.index)
+        df["resid_bad"] = df["bad_rate"] - df["exp_bad"]
         df["category"] = cat_of.reindex(df.index).values
         df["tenure_days"] = (t - first_seen.reindex(df.index)).dt.days
         # velocity + momentum
@@ -227,13 +248,14 @@ def collusion_graph(om, min_shared=3):
 
 # ------------------------------------------------------------ 5. ACTION LAYER
 def action(p):
-    if p >= 0.60:
+    """p is the SENTINEL percentile score (0-1): band = position in the book."""
+    if p >= 0.95:
         return ("CRITICAL", 0.00, 0, 1.00,
                 "Suspend new financing. Recover outstanding. Field audit.")
-    if p >= 0.40:
+    if p >= 0.85:
         return ("HIGH", 0.25, 3, 0.15,
                 "Cap exposure to 25% of current. Max 3-mo tenure. 15% holdback.")
-    if p >= 0.25:
+    if p >= 0.70:
         return ("WATCH", 0.60, 6, 0.07,
                 "Cap exposure to 60%. Max 6-mo tenure. 7% holdback. Weekly review.")
     return ("HEALTHY", 1.00, 12, 0.00, "Full limits. Standard monitoring.")
@@ -266,8 +288,10 @@ def main():
 
     print("[6/6] scoring latest snapshot + action layer ...")
     latest = panel[panel["snapshot"] == panel["snapshot"].max()].copy()
-    latest["risk_prob"] = res["model"].predict_proba(latest[res["features"]])[:, 1]
-    acts = latest["risk_prob"].apply(action)
+    latest["eb_rate"] = __import__("scorer").eb_shrink(latest)
+    latest["risk_prob"] = res["scorer"].prob(latest)
+    latest["sentinel_score"] = res["scorer"].score(latest)
+    acts = latest["sentinel_score"].apply(action)
     latest["risk_band"] = [a[0] for a in acts]
     latest["exposure_multiplier"] = [a[1] for a in acts]
     latest["max_tenure_months"] = [a[2] for a in acts]
@@ -275,7 +299,7 @@ def main():
     latest["recommendation"] = [a[4] for a in acts]
     latest["current_exposure"] = latest["financed_value"]
     latest["revised_limit"] = latest["current_exposure"] * latest["exposure_multiplier"]
-    latest = latest.sort_values("risk_prob", ascending=False)
+    latest = latest.sort_values("sentinel_score", ascending=False)
     latest.to_parquet(f"{OUT}/seller_scores.parquet", index=False)
 
     summary = {**res["metrics"],
@@ -289,6 +313,8 @@ def main():
                "exposure_at_risk": float(
                    latest.loc[latest.risk_band.isin(["CRITICAL", "HIGH"]),
                               "current_exposure"].sum())}
+    from scorer import roi
+    summary["roi_inr"] = roi(summary)
     json.dump(summary, open(f"{OUT}/metrics.json", "w"), indent=2, default=str)
     print(json.dumps(summary, indent=2, default=str))
 
