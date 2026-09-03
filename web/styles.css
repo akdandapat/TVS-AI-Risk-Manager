@@ -171,3 +171,21 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   .head{flex-direction:column;align-items:flex-start;gap:var(--s2)}
   .head .note{text-align:left}
 }
+
+/* ---------------------------------------------------- Part 2 additions */
+.pill.DELIST{background:var(--critical)}.pill.RESTRICT{background:var(--high)}
+.pill.REVIEW{background:var(--watch)}.pill.OK{background:var(--healthy)}
+.pill.SURGE{background:var(--high)}.pill.COLLAPSE{background:var(--accent)}
+.pill.UNSTABLE{background:var(--critical)}.pill.WATCH{background:var(--watch)}
+.pill.STABLE{background:var(--healthy)}
+.heat{border-collapse:collapse;font-size:10.5px;width:100%}
+.heat td,.heat th{padding:0;border:none}
+.heat .cat{font-size:10.5px;color:var(--ink-2);padding-right:8px;text-align:right;
+  white-space:nowrap;width:150px;font-family:'Plex',sans-serif}
+.heat .cell{height:17px;border:1px solid var(--panel)}
+.heat .mh{font-size:9px;color:var(--muted);text-align:center;
+  font-family:'PlexMono',monospace;padding-bottom:3px}
+.legend-ramp{display:flex;align-items:center;gap:6px;font-size:10.5px;
+  color:var(--muted);margin-top:var(--s2)}
+.legend-ramp i{width:15px;height:10px;display:inline-block}
+

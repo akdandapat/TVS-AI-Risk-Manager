@@ -4,14 +4,17 @@ const $ = s => document.querySelector(s);
 const BANDS = ['CRITICAL', 'HIGH', 'WATCH', 'HEALTHY'];
 const C = { CRITICAL: 'var(--critical)', HIGH: 'var(--high)', WATCH: 'var(--watch)', HEALTHY: 'var(--healthy)' };
 const VIEWS = [['portfolio', 'Portfolio'], ['watchlist', 'Watchlist'], ['merchant', 'Merchant file'],
-['evidence', 'Evidence'], ['network', 'Network'], ['categories', 'Categories']];
+['products', 'Products'], ['categories', 'Categories & seasons'],
+['network', 'Network'], ['evidence', 'Evidence']];
+const ACTC = { DELIST: 'var(--critical)', RESTRICT: 'var(--high)', REVIEW: 'var(--watch)', OK: 'var(--healthy)' };
 const NOTES = {
   portfolio: 'Every merchant financed on the book, ranked by SENTINEL score. Colour is used only to carry risk.',
   watchlist: 'The review queue. Sort any column; click a row to open that merchant\u2019s file.',
   merchant: 'One merchant, its trajectory, the evidence behind its score and the binding financing action.',
   evidence: 'Whether the model earns its place \u2014 tested against two baselines under purged walk-forward.',
   network: 'Merchants sharing an abnormal number of customers. The fake-transaction ring signal.',
-  categories: 'Where risk concentrates by product category and delivery region.'
+  categories: 'Where risk concentrates by category and region, and how demand moves through the year.',
+  products: 'SKU-level risk. Which products to stop financing, restrict to cash, or cap on tenure.'
 };
 
 const pct = (v, d = 1) => v == null ? '\u2014' : (v * 100).toFixed(d) + '%';
@@ -40,6 +43,42 @@ function path(pts, cls, extra = '') {
   const len = pts.length * 9;
   return `<path d="${d}" class="${cls} draw" style="--len:${len}" ${extra}/>`;
 }
+
+/* ------------------------------------------------- multi-series line chart */
+function lineChart(series, opts = {}) {
+  const { w = 1000, h = 260, L = 52, R = 16, T = 18, B = 42,
+    xs = [], yfmt = v => v.toFixed(2), xfmt = v => v, ref = null } = opts;
+  const all = series.flatMap(s => s.v).filter(v => v != null);
+  if (!all.length) return '';
+  const lo = opts.lo != null ? opts.lo : Math.min(...all, ...(ref || [])) * 0.98;
+  const hi = opts.hi != null ? opts.hi : Math.max(...all, ...(ref || [])) * 1.02;
+  const n = series[0].v.length;
+  const X = i => L + (n === 1 ? 0 : i / (n - 1) * (w - L - R));
+  const Y = v => T + (1 - (v - lo) / (hi - lo || 1)) * (h - T - B);
+  let s = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px">`;
+  [lo, (lo + hi) / 2, hi].forEach(v => {
+    s += `<line x1="${L}" y1="${Y(v)}" x2="${w - R}" y2="${Y(v)}" stroke="var(--rule-soft)"/>`;
+    s += `<text x="6" y="${Y(v) + 3}" style="font-family:PlexMono;font-size:9.5px;fill:var(--muted)">${yfmt(v)}</text>`;
+  });
+  if (ref) {
+    const p = ref.map((v, i) => [X(i), Y(v)]);
+    s += `<path d="${p.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' ')}"
+      fill="none" stroke="var(--faint)" stroke-width="1" stroke-dasharray="3 3"/>`;
+  }
+  series.forEach(se => {
+    const p = se.v.map((v, i) => [X(i), Y(v)]);
+    s += `<path d="${p.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' ')}"
+      fill="none" stroke="${se.c}" stroke-width="${se.w || 1.4}" class="draw" style="--len:${p.length * 14}"/>`;
+  });
+  xs.forEach((lab, i) => {
+    if (i % Math.ceil(n / 8) === 0)
+      s += `<text x="${X(i)}" y="${h - 16}" text-anchor="middle" style="font-family:PlexMono;font-size:9px;fill:var(--muted)">${xfmt(lab)}</text>`;
+  });
+  if (opts.xlabel) s += `<text x="${w / 2}" y="${h - 3}" text-anchor="middle" style="font-size:10.5px;fill:var(--muted)">${opts.xlabel}</text>`;
+  return s + '</svg>';
+}
+const legend = ss => `<div class="tape-legend">${ss.map(s =>
+  `<span><i class="swatch" style="background:${s.c}"></i>${s.n}</span>`).join('')}</div>`;
 
 /* --------------------------------------------------------------- tape */
 function tape() {
@@ -230,6 +269,57 @@ function merchant() {
     </div></div>`;
 }
 
+/* ----------------------------------------------------------- products */
+function products() {
+  const P = D.products, S = D.product_summary;
+  const W = 1000, H = 330, L = 52, R = 16, T = 18, B = 44;
+  const xs = P.map(p => Math.log10(Math.max(p.n, 1)));
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y1 = Math.max(...P.map(p => p.risk));
+  const X = v => L + (Math.log10(Math.max(v, 1)) - x0) / (x1 - x0 || 1) * (W - L - R);
+  const Y = v => T + (1 - v / y1) * (H - T - B);
+  const mf = Math.max(...P.map(p => p.financed || 1));
+  let g = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">`;
+  [0, y1 / 2, y1].forEach(v => g += `<line x1="${L}" y1="${Y(v)}" x2="${W - R}" y2="${Y(v)}" stroke="var(--rule-soft)"/>
+    <text x="6" y="${Y(v) + 3}" style="font-family:PlexMono;font-size:9.5px;fill:var(--muted)">${pct(v, 0)}</text>`);
+  P.forEach((p, i) => {
+    g += `<circle cx="${X(p.n).toFixed(1)}" cy="${Y(p.risk).toFixed(1)}"
+      r="${(3 + Math.sqrt((p.financed || 1) / mf) * 16).toFixed(1)}" fill="${ACTC[p.act]}"
+      fill-opacity=".55" stroke="${ACTC[p.act]}" data-pi="${i}" class="pnode" style="cursor:pointer"/>`;
+  });
+  g += `<text x="${W / 2}" y="${H - 6}" text-anchor="middle" style="font-size:10.5px;fill:var(--muted)">orders (log scale) → bubble size = financed value → colour = action</text></svg>`;
+
+  const rows = P.slice(0, 40).map((p, i) => `<tr data-pi="${i}">
+    <td class="mono">${p.short}…</td><td>${p.cat}</td>
+    <td><span class="pill ${p.act}">${p.act}</span></td>
+    <td class="n">${p.n}</td><td class="n">${pct(p.bad)}</td>
+    <td class="n">${pct(p.risk)}</td><td class="n">${pct(p.cat_bad)}</td>
+    <td class="n">${p.excess > 0 ? '+' : ''}${pct(p.excess)}</td>
+    <td class="n">${brl(p.financed)}</td><td class="n">${brl(p.ear)}</td></tr>`).join('');
+
+  const k = (l, v, s, c = '') => `<div class="kpi ${c}"><div class="lab">${l}</div>
+    <div class="val">${v}</div><div class="sub">${s}</div></div>`;
+  return `<div class="kpis">
+    ${k('Products scored', S.scored.toLocaleString(), 'with 5+ financed orders')}
+    ${k('Delist', S.delist, 'stop financing this SKU', 'crit')}
+    ${k('Restrict', S.restrict, 'cash only, no EMI')}
+    ${k('Review', S.review, 'cap tenure at 3 months')}
+    ${k('Exposure at risk', brl(S.ear_flagged), `of ${brl(S.ear_total)} total`)}
+  </div>
+  <div class="card"><h3>SKU risk surface</h3>
+    <div class="hint">Each product's rate is shrunk toward its own category mean (k=8), so a
+    product with five orders and two complaints does not outrank one with two hundred orders
+    and forty. High and to the right, with a large bubble, is where financing loss lives.</div>
+    ${g}</div>
+  <div class="card" style="margin-top:var(--s5)"><h3>Delist and restrict queue</h3>
+    <div class="hint">Ranked by exposure at risk — the financed value multiplied by the
+    shrunk risk — not by risk alone. A 60% risk on R$200 is not the problem.</div>
+    <div class="scroll"><table><thead><tr><th>Product</th><th>Category</th><th>Action</th>
+    <th style="text-align:right">Orders</th><th style="text-align:right">Raw bad</th>
+    <th style="text-align:right">Shrunk</th><th style="text-align:right">Category</th>
+    <th style="text-align:right">Excess</th><th style="text-align:right">Financed</th>
+    <th style="text-align:right">At risk</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+
 /* ----------------------------------------------------------- evidence */
 function evidence() {
   const M = D.metrics, W = D.walkforward;
@@ -263,6 +353,34 @@ function evidence() {
   const mi = Math.max(...imp.map(x => x.v));
   const impb = imp.map(x => `<div class="bar-row"><span class="nm">${x.f}</span>
     <span class="bar" style="width:${x.v / mi * 160}px"></span><span class="vv">${x.v}</span></div>`).join('');
+
+  // ---- policy capture curve
+  const scOrder = [['s_sentinel', 'SENTINEL', 'var(--accent)', 2.4],
+  ['s_eb', 'Shrunk rate', 'var(--watch)', 1.4],
+  ['s_naive', 'Raw bad rate', 'var(--high)', 1.4],
+  ['s_model', 'Model alone', 'var(--faint)', 1.4]];
+  const depths = [...new Set(D.policy_frontier.map(r => r.d))].sort((x, y) => x - y);
+  const pser = scOrder.map(([k, n, c, wd]) => ({
+    n, c, w: wd, v: depths.map(d =>
+      (D.policy_frontier.find(r => r.scorer === k && r.d === d) || {}).c)
+  }));
+  const capChart = lineChart(pser, {
+    h: 300, xs: depths, xfmt: v => (v * 100).toFixed(0) + '%',
+    yfmt: v => (v * 100).toFixed(0) + '%', lo: 0, hi: 0.72, ref: depths,
+    xlabel: 'share of financed value declined  ·  dashed line = no skill'
+  });
+  const psum = D.policy_summary.map(r => {
+    const nm = scOrder.find(s => s[0] === r.scorer);
+    return `<tr><td>${nm ? nm[1] : r.scorer}</td><td class="n">${pct(r.cap20)}</td>
+      <td class="n">${num(r.mean_capture, 3)}</td>
+      <td class="n">${r.scorer === 's_naive' ? '—' : r.wins + '/' + r.n}</td>
+      <td class="n">${r.p == null ? '—' : num(r.p, 4)}</td></tr>`;
+  }).join('');
+
+  const dr = D.drift.slice(0, 10).map(x => `<tr><td class="mono">${x.f}</td>
+    <td class="n">${num(x.psi, 3)}</td>
+    <td><span class="pill ${x.status}">${x.status}</span></td></tr>`).join('');
+  const nUnstable = D.drift.filter(x => x.status === 'UNSTABLE').length;
 
   return `<div class="verdict">
     <strong>The question that decides this project:</strong> why not just rank merchants by their
@@ -308,8 +426,29 @@ function evidence() {
       <div class="caption">Assumes the observed ${pct(M.bad_order_rate)} bad-order rate and the model\u2019s
       measured ${pct(M.pct_loss_captured, 0)} capture of financed value in bad orders.</div></div>
   </div>
+  <div class="card" style="margin-top:var(--s5)"><h3>Policy backtest — what happens when you act on the score</h3>
+    <div class="hint">Every scorer is compared at <b>equal financed value declined</b>, not equal
+    merchant count. Comparing by headcount flatters any scorer that prefers large merchants,
+    because it silently declines far more money for the same number of files. At a 20% decline
+    budget SENTINEL captures ${pct(M.policy_capture_sentinel)} of bad financed value against
+    ${pct(M.policy_capture_naive)} for raw persistence, winning ${M.policy_wins}/${M.policy_n}
+    snapshots (p = ${num(M.policy_p, 4)}).</div>
+    ${capChart}${legend(pser)}
+    <table style="margin-top:var(--s4)"><thead><tr><th>Scorer</th>
+      <th style="text-align:right">Capture @20%</th><th style="text-align:right">Mean capture</th>
+      <th style="text-align:right">Snapshots won</th><th style="text-align:right">p vs naive</th>
+    </tr></thead><tbody>${psum}</tbody></table></div>
   <div class="grid2" style="margin-top:var(--s5)">
+    <div class="card"><h3>Feature drift (PSI)</h3>
+      <div class="hint">Training era against live era. Above 0.25 is the conventional retrain
+      line. ${nUnstable} features are unstable — <code>exp_bad</code> is an expanding mean so it
+      trends by construction. We report it rather than suppress it; it is the argument for a
+      retraining cadence.</div>
+      <table><thead><tr><th>Feature</th><th style="text-align:right">PSI</th><th>Status</th>
+      </tr></thead><tbody>${dr}</tbody></table></div>
     <div class="card"><h3>What drives the model</h3>${impb}</div>
+  </div>
+  <div class="grid2" style="margin-top:var(--s5)">
     <div class="card"><h3>What this cannot do</h3>
       <div class="memo" style="font-size:12.5px">
       <p><strong>The label is constructed, not ground truth.</strong> Olist carries no fraud flag.
@@ -411,11 +550,73 @@ function categories() {
       <th style="text-align:right">Late</th><th style="text-align:right">Financed</th></tr></thead>
       <tbody>${rows}</tbody></table></div></div>
     <div class="card"><h3>Delivery region</h3>
-      <div class="hint">Bad-order rate by destination state.</div>${sb}</div></div>`;
+      <div class="hint">Bad-order rate by destination state.</div>${sb}</div></div>
+  ${seasons()}`;
+}
+
+/* -------------------------------------------------------- seasonality */
+function seasons() {
+  const MN = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const cats = [...new Set(D.seasonal.map(s => s.cat))];
+  const byCat = {};
+  D.seasonal.forEach(s => { (byCat[s.cat] = byCat[s.cat] || {})[s.m] = s.v; });
+  const spread = c => {
+    const v = Object.values(byCat[c] || {}); return v.length ? Math.max(...v) - Math.min(...v) : 0;
+  };
+  const top = cats.sort((x, y) => spread(y) - spread(x)).slice(0, 14);
+  const heat = `<table class="heat"><tr><th></th>${MN.map(m =>
+    `<th class="mh">${m}</th>`).join('')}</tr>` + top.map(c => {
+      const r = byCat[c] || {};
+      return `<tr><td class="cat">${c.replace(/_/g, ' ').slice(0, 26)}</td>` +
+        MN.map((_, i) => {
+          const v = r[i + 1];
+          if (v == null) return '<td class="cell" style="background:var(--rule-soft)"></td>';
+          const o = Math.max(0.04, Math.min((v - 0.5) / 1.4, 1));
+          return `<td class="cell" style="background:rgba(20,23,26,${o.toFixed(2)})"
+            title="${c} · month ${i + 1} · index ${v.toFixed(2)}"></td>`;
+        }).join('') + '</tr>';
+    }).join('') + '</table>';
+
+  const sh = D.demand_shifts.slice(0, 20).map(s => `<tr><td>${s.cat.replace(/_/g, ' ')}</td>
+    <td class="mono">${s.ym}</td><td><span class="pill ${s.kind}">${s.kind}</span></td>
+    <td class="n">${s.n}</td><td class="n">${num(s.z, 1)}</td>
+    <td class="n">${pct(s.bad)}</td></tr>`).join('');
+  const vb = D.volume_breaks.slice(0, 16).map(b => `<tr data-id="${b.id}">
+    <td class="mono">${b.short}…</td><td class="mono">${b.snap}</td>
+    <td><span class="pill ${b.kind.includes('SURGE') ? 'SURGE' : 'COLLAPSE'}">${b.kind.split(' ')[1]}</span></td>
+    <td class="n">${b.n}</td><td class="n">${num(b.mean, 0)}</td>
+    <td class="n">${num(b.z, 1)}</td><td class="n">${brl(b.expo)}</td></tr>`).join('');
+
+  return `<div class="card" style="margin-top:var(--s5)"><h3>Seasonal pattern by category</h3>
+    <div class="hint">Index of each category's <b>share of platform volume</b>, by month. Share
+    rather than raw volume because Olist grew roughly tenfold across the window — measuring
+    absolute orders would rediscover that growth and call it seasonality. Darker is a heavier
+    month for that category.</div>
+    ${heat}
+    <div class="legend-ramp"><span>lighter = below its own average</span>
+      <i style="background:rgba(20,23,26,.08)"></i><i style="background:rgba(20,23,26,.3)"></i>
+      <i style="background:rgba(20,23,26,.6)"></i><i style="background:rgba(20,23,26,.9)"></i>
+      <span>heavier month</span></div></div>
+  <div class="grid2" style="margin-top:var(--s5)">
+    <div class="card"><h3>Demand shocks</h3>
+      <div class="hint">Deseasonalised <i>and</i> detrended against platform growth, so what
+      remains is a genuine shift in what people are buying. Watch the bad-rate column: a surge
+      a merchant cannot fulfil shows up as quality failure a month later.</div>
+      <div class="scroll"><table><thead><tr><th>Category</th><th>Month</th><th>Shift</th>
+      <th style="text-align:right">Orders</th><th style="text-align:right">z</th>
+      <th style="text-align:right">Bad rate</th></tr></thead><tbody>${sh}</tbody></table></div></div>
+    <div class="card"><h3>Merchant volume breaks</h3>
+      <div class="hint">A merchant whose order volume breaks from its own recent trend. Either a
+      success story or a ring warming up — triage signals, not verdicts.</div>
+      <div class="scroll"><table><thead><tr><th>Merchant</th><th>Snapshot</th><th>Kind</th>
+      <th style="text-align:right">Orders</th><th style="text-align:right">Trend</th>
+      <th style="text-align:right">z</th><th style="text-align:right">Exposure</th>
+      </tr></thead><tbody>${vb}</tbody></table></div></div>
+  </div>`;
 }
 
 /* ---------------------------------------------------------------- app */
-const R = { portfolio, watchlist, merchant, evidence, network, categories };
+const R = { portfolio, watchlist, merchant, products, evidence, network, categories };
 let view = 'portfolio';
 function open(id) { CUR = D.merchants.find(m => m.id === id); go('merchant'); }
 function go(v) {
@@ -437,6 +638,12 @@ function go(v) {
     n.onmouseenter = e => tip(e, m ? `${m.short}\u2026\n${m.band}  score ${num(m.score)}` : n.dataset.id.slice(0, 10));
     n.onmousemove = move; n.onmouseleave = untip;
     n.onclick = () => m && open(m.id);
+  });
+  el.querySelectorAll('.pnode,tr[data-pi]').forEach(n => {
+    const p = D.products[+n.dataset.pi];
+    if (!p) return;
+    n.onmouseenter = e => tip(e, `${p.short}\u2026\n${p.cat}\n${p.n} orders  shrunk risk ${pct(p.risk)}\ncategory norm ${pct(p.cat_bad)}\nfinanced ${brl(p.financed)}\n${p.action}`);
+    n.onmousemove = move; n.onmouseleave = untip;
   });
   el.querySelectorAll('.cnode').forEach(n => {
     const k = D.categories.find(c => c.name === n.dataset.cat);

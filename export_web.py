@@ -23,6 +23,14 @@ def main():
     E = pd.read_csv(f"{A}/collusion_edges.csv")
     WF = pd.read_csv(f"{A}/walkforward.csv")
     IMP = pd.read_csv(f"{A}/feature_importance.csv", index_col=0)
+    PR = pd.read_parquet(f"{A}/product_risk.parquet")
+    PF = pd.read_csv(f"{A}/policy_frontier.csv")
+    PS = pd.read_csv(f"{A}/policy_summary.csv").rename(columns={"Unnamed: 0": "scorer"})
+    DS = pd.read_csv(f"{A}/demand_shifts.csv")
+    DSER = pd.read_csv(f"{A}/demand_series.csv")
+    SI = pd.read_csv(f"{A}/seasonal_index.csv")
+    VB = pd.read_csv(f"{A}/volume_breaks.csv")
+    DR = pd.read_csv(f"{A}/drift.csv")
     B = pickle.load(open(f"{A}/model.pkl", "rb"))
     SC, FEATS = B["scorer"], B["features"]
 
@@ -124,6 +132,52 @@ def main():
                              "w": int(r.shared_customers)} for r in edges.itertuples()]},
         "importance": [{"f": i, "v": jnum(v, 1)}
                        for i, v in IMP["importance"].head(16).items()],
+        # ---- Part 2 additions ----
+        "products": [{
+            "id": r.product_id, "short": r.product_id[:10], "cat": str(r.category),
+            "n": int(r.n_orders), "bad": jnum(r.bad_rate, 4), "risk": jnum(r.risk, 4),
+            "cat_bad": jnum(r.cat_bad, 4), "excess": jnum(r.excess, 4),
+            "financed": jnum(r.financed, 0), "ear": jnum(r.exposure_at_risk, 0),
+            "cancel": jnum(r.cancel_rate, 4), "late": jnum(r.late_rate, 4),
+            "review": jnum(r.mean_review, 2), "sellers": int(r.n_sellers),
+            "price": jnum(r.mean_price, 0), "pctile": jnum(r.pctile, 3),
+            "action": r.action, "act": r.action.split(" ")[0]}
+            for r in PR.nlargest(140, "exposure_at_risk").itertuples()],
+        "product_summary": {
+            "scored": int(len(PR)),
+            "delist": int(PR.action.str.startswith("DELIST").sum()),
+            "restrict": int(PR.action.str.startswith("RESTRICT").sum()),
+            "review": int(PR.action.str.startswith("REVIEW").sum()),
+            "ear_total": jnum(PR.exposure_at_risk.sum(), 0),
+            "ear_flagged": jnum(
+                PR.loc[~PR.action.str.startswith("OK"), "exposure_at_risk"].sum(), 0)},
+
+        "policy_frontier": [{"scorer": r.scorer, "d": jnum(r.declined, 3),
+                             "c": jnum(r.captured, 4)} for r in PF.itertuples()],
+        "policy_summary": [{"scorer": r.scorer, "mean_capture": jnum(r.mean_capture, 4),
+                            "cap20": jnum(r.capture_at_20pct, 4),
+                            "wins": int(r.wins_vs_naive), "n": int(r.n_snapshots),
+                            "p": jnum(r.p_vs_naive, 4)} for r in PS.itertuples()],
+
+        "seasonal": [{"cat": r.category, "m": int(r.month),
+                      "v": jnum(r.seasonal_index, 3)} for r in SI.itertuples()],
+        "demand_series": [{"cat": r.category, "ym": str(r.ym),
+                           "share": jnum(r.share, 5), "z": jnum(r.z, 2),
+                           "bad": jnum(r.bad_rate, 4), "n": int(r.n)}
+                          for r in DSER.itertuples()],
+        "demand_shifts": [{"cat": r.category, "ym": str(r.ym), "n": int(r.n),
+                           "z": jnum(r.z, 2), "kind": r.shift,
+                           "bad": jnum(r.bad_rate, 4)}
+                          for r in DS.reindex(DS.z.abs().sort_values(
+                              ascending=False).index).head(60).itertuples()],
+        "volume_breaks": [{"id": r.seller_id, "short": r.seller_id[:10],
+                           "snap": str(r.snapshot)[:10], "n": int(r.n_orders),
+                           "mean": jnum(r.v_mean, 1), "z": jnum(r.v_z, 2),
+                           "bad": jnum(r.bad_rate, 4),
+                           "expo": jnum(r.financed_value, 0), "kind": r.kind}
+                          for r in VB.head(50).itertuples()],
+        "drift": [{"f": r.feature, "psi": jnum(r.psi, 4), "status": r.status}
+                  for r in DR.itertuples()],
     }
     path = os.path.join(WEB, "data.json")
     json.dump(out, open(path, "w"), separators=(",", ":"), default=str)
