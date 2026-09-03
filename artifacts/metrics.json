@@ -1,0 +1,54 @@
+{
+  "engine": "LightGBM",
+  "n_features": 45,
+  "train_rows": 4152,
+  "test_rows": 1626,
+  "split_date": "2018-03-24 21:15:19",
+  "roc_auc": 0.6575291371979268,
+  "avg_precision": 0.23500992211635724,
+  "base_rate": 0.12115621156211562,
+  "top_decile_lift": 2.190825343109607,
+  "operating_points": {
+    "thr_0.25": {
+      "flagged": 619,
+      "precision": 0.1777059773828756,
+      "recall": 0.5583756345177665,
+      "lift": 1.4667508590078973
+    },
+    "thr_0.4": {
+      "flagged": 285,
+      "precision": 0.21052631578947367,
+      "recall": 0.30456852791878175,
+      "lift": 1.73764360138926
+    },
+    "thr_0.6": {
+      "flagged": 92,
+      "precision": 0.31521739130434784,
+      "recall": 0.14720812182741116,
+      "lift": 2.6017435444714194
+    }
+  },
+  "loss_avoided_brl": 106590.25,
+  "total_bad_financed_brl": 464642.05,
+  "pct_loss_captured": 0.22940293501201625,
+  "ew_threshold": 0.2,
+  "ew_eligible": 174,
+  "ew_caught_early": 87,
+  "pct_caught_early": 0.5,
+  "median_lead_days": 28.0,
+  "mean_lead_days": 64.85057471264368,
+  "max_lead_days": 350,
+  "n_orders": 98666,
+  "bad_order_rate": 0.15218008229785338,
+  "n_seller_snapshots": 5778,
+  "n_sellers": 613,
+  "deterioration_rate": 0.18137763932156456,
+  "n_collusion_edges": 44,
+  "band_counts": {
+    "HEALTHY": 155,
+    "WATCH": 32,
+    "HIGH": 18,
+    "CRITICAL": 1
+  },
+  "exposure_at_risk": 104102.68000000001
+}

@@ -1,0 +1,8 @@
+pandas>=2.0
+numpy
+scikit-learn
+lightgbm
+shap
+pyarrow
+streamlit
+plotly
