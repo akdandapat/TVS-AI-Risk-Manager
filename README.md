@@ -123,8 +123,8 @@ population. We display intervals for transparency but score 100% of eligible mer
    % ≥6 installments, financed value), concentration (top-customer share, repeat rate),
    and **category-peer z-scores** that catch a merchant drifting from its own category norm.
 
-4. **Blended percentile scorer.** Final score = 0.75 x percentile(model probability)
-   + 0.25 x percentile(observed bad rate), with the weight chosen on a held-out
+4. **Blended percentile scorer.** Final score = 0.30 x percentile(model probability)
+   + 0.70 x percentile(shrunk empirical-Bayes rate), with the weight chosen on a held-out
    validation slice that never touched the test set. Percentiles are taken against
    frozen reference distributions, so a single merchant can be scored in isolation
    in real time, not only in a batch. Risk bands are book positions: CRITICAL is the

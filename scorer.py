@@ -31,7 +31,7 @@ def _fit_ensemble(train, feats, seeds=N_SEEDS):
 
 
 class RiskScorer:
-    """SENTINEL score = 0.75*pct(model prob) + 0.25*pct(observed bad rate).
+    """SENTINEL score = 0.30*pct(model prob) + 0.70*pct(shrunk rate).
 
     Percentiles are taken against reference distributions frozen at training time,
     so a single merchant can be scored in isolation (real-time), not just in a batch.
