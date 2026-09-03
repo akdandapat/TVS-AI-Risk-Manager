@@ -35,6 +35,8 @@ def main():
     CONF = pd.read_parquet(f"{A}/panel_confidence.parquet")
     B = pickle.load(open(f"{A}/model.pkl", "rb"))
     SC, FEATS = B["scorer"], B["features"]
+    ADV = json.load(open(f"{A}/advanced_metrics.json")) if os.path.exists(f"{A}/advanced_metrics.json") else {}
+    LEVERS = json.load(open(f"{A}/levers.json")) if os.path.exists(f"{A}/levers.json") else {}
 
     from scorer import narrative
     PEER = S[FEATS].mean()
@@ -93,6 +95,9 @@ def main():
             "lead": lead,
             "drivers": drivers,
             "memo": narrative(r.to_dict(), PEER),
+            "levers": [{"f": lv["feature"], "cur": lv["current"],
+                         "tgt": lv["target"], "d": lv["delta"]}
+                        for lv in LEVERS.get(r.seller_id, [])],
         })
 
     cat = (OM.groupby("category").agg(
@@ -195,6 +200,8 @@ def main():
                 b=pd.cut(CONF.n_orders, [0, 10, 20, 40, 80, 1e9],
                          labels=["5-10", "11-20", "21-40", "41-80", "80+"]))
               .groupby("b", observed=True)],
+        # ---- Part 6 additions ----
+        "advanced": ADV,
     }
     path = os.path.join(WEB, "data.json")
     json.dump(out, open(path, "w"), separators=(",", ":"), default=str)

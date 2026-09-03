@@ -273,7 +273,21 @@ function merchant() {
         <div class="hint">SHAP contributions. Red raises risk, green lowers it.</div>${drivers}</div>
       <div class="card" style="margin-top:var(--s5)"><h3>Complaint mix</h3>
         <div class="hint">Portuguese review text, keyword taxonomy.</div>${cx}</div>
-    </div></div>`;
+    </div></div>
+  ${m.levers && m.levers.length ? leversCard(m) : ''}`;
+}
+
+function leversCard(m) {
+  const mx = Math.max(...m.levers.map(l => l.d)) || 1;
+  const rows = m.levers.map(l => `<div class="bar-row"><span class="nm">${l.f.replace(/_/g, ' ')}</span>
+    <span class="bar dn" style="width:${l.d / mx * 150}px"></span>
+    <span class="vv">${num(l.cur, 3)} → ${num(l.tgt, 3)} (−${num(l.d, 3)})</span></div>`).join('');
+  return `<div class="card" style="margin-top:var(--s5)"><h3>Improvement levers</h3>
+    <div class="hint">What this merchant would need to improve — and by how much — to lower
+    its score. Each bar is the score reduction from moving one feature to the peer median.
+    These are not punishments: they are the ranked list of fixable problems.</div>${rows}
+    <div class="caption">Simulated on the live model. If a feature is already at or below the
+    peer median it does not appear — there is nothing to fix.</div></div>`;
 }
 
 /* ----------------------------------------------------------- products */
@@ -518,6 +532,94 @@ function evidence() {
       Indian LMS is in the README.</p>
       <p><strong>No leakage.</strong> Every feature comes from a strictly past window, the split is
       temporal, and overlapping outcome windows are purged from training.</p></div></div>
+  </div>
+  ${assurance()}`;
+}
+
+function assurance() {
+  const A = D.advanced;
+  if (!A || !A.survival) return '';
+
+  // ---- Survival KM table
+  const bands = ['CRITICAL', 'HIGH', 'WATCH', 'HEALTHY'];
+  const survRows = bands.map(b => {
+    const v = A.survival[b];
+    if (!v || !v.median_days) return '';
+    return `<tr><td><span class="pill ${b}">${b}</span></td>
+      <td class="n">${v.n}</td><td class="n">${v.median_days}d</td>
+      <td class="n">${pct(v.failed_by_90d)}</td>
+      <td class="n">${v.q25}d</td><td class="n">${v.q75}d</td></tr>`;
+  }).join('');
+  const survMeds = bands.map(b => (A.survival[b] || {}).median_days || 0).filter(v => v > 0);
+  const isMonotonic = survMeds.length >= 3 &&
+    survMeds.every((v, i) => i === 0 || v >= survMeds[i - 1]);
+
+  // ---- Survival bar chart
+  const maxMed = Math.max(...survMeds, 1);
+  const survBars = bands.map(b => {
+    const v = A.survival[b];
+    if (!v || !v.median_days) return '';
+    return `<div class="bar-row"><span class="nm">${b}</span>
+      <span class="bar" style="width:${v.median_days / maxMed * 180}px;background:${C[b]}"></span>
+      <span class="vv">${v.median_days}d median · ${pct(v.failed_by_90d)} fail by 90d</span></div>`;
+  }).join('');
+
+  // ---- Gaming resistance
+  const G = A.gaming || {};
+  let gamingHtml = '';
+  if (G.full_auc) {
+    gamingHtml = `<div class="card"><h3>Gaming resistance</h3>
+      <div class="hint">The score retrained after dropping every feature a merchant can directly
+      manipulate (review scores, response times, complaint keywords). If AUC retention is above
+      85%, the score is robust to gaming. ${G.robust ? '<b>It is.</b>' : '<b>It is not — investigate.</b>'}</div>
+      <div class="metrics-grid" style="margin-top:var(--s3)">
+        <div><div class="l">Full AUC</div><div class="v">${num(G.full_auc, 4)}</div></div>
+        <div><div class="l">Without gameable</div><div class="v">${num(G.safe_auc, 4)}</div></div>
+        <div><div class="l">AUC retention</div><div class="v ${G.robust ? 'pos' : ''}">${pct(G.retention)}</div></div>
+        <div><div class="l">Features dropped</div><div class="v">${G.features_dropped} of ${G.features_total}</div></div>
+      </div>
+      <div class="caption">${G.features_dropped} gameable features removed:
+        ${(G.dropped_features || []).join(', ')}.</div></div>`;
+  }
+
+  // ---- Rule extraction
+  const R = A.rules || {};
+  let rulesHtml = '';
+  if (R.rules && R.rules.length) {
+    const ruleRows = R.rules.map((r, i) => {
+      const cond = r.conditions.map(c => `<code>${esc(c)}</code>`).join(' AND ');
+      return `<tr><td class="n">${i + 1}</td><td style="font-size:11.5px">${cond}</td>
+        <td class="n">${r.n}</td><td class="n">${pct(r.precision)}</td>
+        <td class="n">${pct(r.coverage)}</td></tr>`;
+    }).join('');
+    rulesHtml = `<div class="card"><h3>The model, on one page</h3>
+      <div class="hint">A shallow decision tree trained on the model's own predictions, not on the
+      target. If the ensemble goes down, these ${R.n_rules} rules give
+      ${pct(R.combined_coverage, 0)} coverage on paper. They are not the model — they are
+      an interpretable fallback.</div>
+      <table><thead><tr><th style="text-align:right">#</th><th>Conditions</th>
+        <th style="text-align:right">n</th><th style="text-align:right">Precision</th>
+        <th style="text-align:right">Coverage</th></tr></thead>
+      <tbody>${ruleRows}</tbody></table>
+      ${R.tree_auc ? `<div class="caption">Surrogate tree AUC on actual target: ${num(R.tree_auc, 4)}
+        — intentionally lower than the ensemble, this is a fallback, not a replacement.</div>` : ''}
+    </div>`;
+  }
+
+  return `<div class="card" style="margin-top:var(--s5)"><h3>Assurance — survival by band</h3>
+    <div class="hint">Kaplan-Meier from the moment a merchant is first scored into a band, to the
+    moment it actually deteriorates. A band that only ranks merchants is a sorting exercise. A band
+    that tells a risk officer <b>how much time is on the clock</b> is a decision tool.
+    ${isMonotonic ? '<b>Perfectly monotonic</b> — the bands separate time-to-failure as expected.' :
+      'Note: survival medians are not monotonic — investigate.'}</div>
+    ${survBars}
+    <table style="margin-top:var(--s3)"><thead><tr><th>Band</th>
+      <th style="text-align:right">n</th><th style="text-align:right">Median days</th>
+      <th style="text-align:right">Failed ≤90d</th>
+      <th style="text-align:right">Q25</th><th style="text-align:right">Q75</th>
+      </tr></thead><tbody>${survRows}</tbody></table></div>
+  <div class="grid2" style="margin-top:var(--s5)">
+    ${gamingHtml}${rulesHtml}
   </div>`;
 }
 function wireROI() {

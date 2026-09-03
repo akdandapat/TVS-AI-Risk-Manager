@@ -1,0 +1,98 @@
+{
+  "survival": {
+    "CRITICAL": {
+      "n": 62,
+      "median_days": 378.0,
+      "failed_by_90d": 0.145,
+      "mean_days": 325.4,
+      "q25": 378.0,
+      "q75": 378.0
+    },
+    "HIGH": {
+      "n": 234,
+      "median_days": 378.0,
+      "failed_by_90d": 0.248,
+      "mean_days": 284.3,
+      "q25": 108.0,
+      "q75": 378.0
+    },
+    "WATCH": {
+      "n": 331,
+      "median_days": 378.0,
+      "failed_by_90d": 0.269,
+      "mean_days": 267.6,
+      "q25": 70.0,
+      "q75": 378.0
+    },
+    "HEALTHY": {
+      "n": 547,
+      "median_days": 210.0,
+      "failed_by_90d": 0.373,
+      "mean_days": 212.3,
+      "q25": 35.0,
+      "q75": 378.0
+    }
+  },
+  "gaming": {
+    "full_auc": 0.6469,
+    "safe_auc": 0.6483,
+    "retention": 1.002,
+    "features_total": 47,
+    "features_dropped": 3,
+    "features_remaining": 44,
+    "dropped_features": [
+      "badreview_rate",
+      "mean_delay",
+      "mean_review"
+    ],
+    "robust": "True"
+  },
+  "rules": {
+    "n_rules": 4,
+    "rules": [
+      {
+        "conditions": [
+          "bad_rate > 0.17",
+          "bad_rate > 0.184",
+          "bad_rate > 0.201"
+        ],
+        "n": 2138,
+        "precision": 0.985,
+        "coverage": 0.225
+      },
+      {
+        "conditions": [
+          "bad_rate > 0.17",
+          "bad_rate > 0.184",
+          "bad_rate <= 0.201"
+        ],
+        "n": 621,
+        "precision": 0.887,
+        "coverage": 0.065
+      },
+      {
+        "conditions": [
+          "bad_rate > 0.17",
+          "bad_rate <= 0.184",
+          "cross_state_rate <= 0.592"
+        ],
+        "n": 230,
+        "precision": 0.779,
+        "coverage": 0.024
+      },
+      {
+        "conditions": [
+          "bad_rate > 0.17",
+          "bad_rate <= 0.184",
+          "cross_state_rate > 0.592"
+        ],
+        "n": 232,
+        "precision": 0.535,
+        "coverage": 0.024
+      }
+    ],
+    "tree_auc": 0.6218,
+    "combined_coverage": 0.338
+  },
+  "rules_text": "|--- bad_rate <= 0.17\n|   |--- bad_rate <= 0.15\n|   |   |--- bad_rate <= 0.15\n|   |   |   |--- class: 0\n|   |   |--- bad_rate >  0.15\n|   |   |   |--- class: 0\n|   |--- bad_rate >  0.15\n|   |   |--- carrier_lag <= 1.29\n|   |   |   |--- class: 0\n|   |   |--- carrier_lag >  1.29\n|   |   |   |--- class: 0\n|--- bad_rate >  0.17\n|   |--- bad_rate <= 0.18\n|   |   |--- cross_state_rate <= 0.59\n|   |   |   |--- class: 1\n|   |   |--- cross_state_rate >  0.59\n|   |   |   |--- class: 1\n|   |--- bad_rate >  0.18\n|   |   |--- bad_rate <= 0.20\n|   |   |   |--- class: 1\n|   |   |--- bad_rate >  0.20\n|   |   |   |--- class: 1\n"
+}
