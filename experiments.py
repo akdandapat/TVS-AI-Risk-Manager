@@ -78,7 +78,6 @@ def purged_wf(panel, horizon, depth=0.20, start=0.45, step=2, seeds=3):
                    b_lift=d.b_lift.mean(), wins=int((d.m_auc > d.b_auc).sum()),
                    p=float(stats.ttest_rel(d.m_auc, d.b_auc).pvalue))
 
-
 def run_one(LB, HZ, ST, MT, om, cx):
     P.LOOKBACK, P.HORIZON, P.STEP, P.MIN_ORDERS_TARGET = LB, HZ, ST, MT
     globals()["LB"] = LB

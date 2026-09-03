@@ -1,0 +1,10 @@
+{
+  "n_products_scored": 3998,
+  "n_products_delist": 79,
+  "n_products_restrict": 240,
+  "product_exposure_at_risk": 782652.701848143,
+  "n_demand_shifts": 118,
+  "n_volume_breaks": 1434,
+  "n_features_unstable": 5,
+  "max_psi": 2.3298840579485556
+}

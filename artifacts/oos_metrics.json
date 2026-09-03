@@ -1,0 +1,57 @@
+{
+  "oos_ew_threshold": 0.7,
+  "oos_ew_eligible": 211,
+  "oos_ew_caught": 80,
+  "oos_ew_missed": 131,
+  "oos_pct_caught_early": 0.3791469194312796,
+  "oos_median_lead_days": 49.0,
+  "oos_mean_lead_days": 66.5875,
+  "oos_max_lead_days": 266,
+  "policy": {
+    "s_sentinel": {
+      "mean_capture": 0.4038667317874687,
+      "capture_at_20pct": 0.27845539528827357,
+      "bad_avoided": 989087.8126265245,
+      "good_forgone": 3117411.288,
+      "net_benefit": 159136.05713928357,
+      "wins_vs_naive": 36,
+      "n_snapshots": 55,
+      "p_vs_naive": 0.0021369939553933593
+    },
+    "s_eb": {
+      "mean_capture": 0.3998555280337298,
+      "capture_at_20pct": 0.27449327087329745,
+      "bad_avoided": 975014.143962623,
+      "good_forgone": 3117411.288,
+      "net_benefit": 154210.27310691803,
+      "wins_vs_naive": 39,
+      "n_snapshots": 55,
+      "p_vs_naive": 0.0019105290150016345
+    },
+    "s_naive": {
+      "mean_capture": 0.39773264820980414,
+      "capture_at_20pct": 0.27111081448591023,
+      "bad_avoided": 962999.4857943302,
+      "good_forgone": 3117411.288,
+      "net_benefit": 150005.14274801558,
+      "wins_vs_naive": 0,
+      "n_snapshots": 55,
+      "p_vs_naive": null
+    },
+    "s_model": {
+      "mean_capture": 0.3876926337637474,
+      "capture_at_20pct": 0.25324022530567514,
+      "bad_avoided": 899522.2385880868,
+      "good_forgone": 3117411.288,
+      "net_benefit": 127788.10622583033,
+      "wins_vs_naive": 21,
+      "n_snapshots": 55,
+      "p_vs_naive": 0.03398659621241284
+    }
+  },
+  "policy_depth": 0.2,
+  "policy_margin": 0.06,
+  "policy_recovery": 0.35,
+  "total_bad_financed": 3552051.1699999995,
+  "total_good_financed": 15587056.44
+}

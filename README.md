@@ -21,12 +21,14 @@ Built on the **real Olist Brazilian E-Commerce dataset** — 98,666 orders, 3,09
 | Raw bad rate (naive persistence) | 0.6363 | the baseline to beat |
 | Gradient-boosted model alone | 0.6181 | **worst of the four** |
 
-| Business metric | Value |
+| Business metric (out-of-sample) | Value |
 |---|---|
-| **Early-warning lead time (median)** | **35 days** |
-| **Deteriorating merchants caught early** | **57%** (125 of 220) |
-| Financed value in bad orders captured | **19%** |
-| Modelled annual saving, Rs 500 Cr book | **~Rs 5.1 Cr** |
+| **Early-warning lead time (median)** | **49 days** |
+| Deteriorating merchants caught early | 38% (80 of 211) |
+| **Policy capture at 20% of book declined** | **27.8%** vs 27.1% naive |
+| Policy backtest | wins 36/55 snapshots, p = 0.0021 |
+| Products scored / flagged for delisting | 3,998 / 79 |
+| Deseasonalised demand shocks detected | 118 |
 
 ### Read this before you read the numbers
 
@@ -41,6 +43,17 @@ does not deserve to exist. We tested it first, not last.
 overlapped the test window leaked future information. After adding the purge, the same model
 scored 0.640 and won 2 of 12 — it did not beat the baseline at all. The number in this README
 is the purged one.
+
+**The in-sample lead time was also inflated.** v3 measured lead time by scoring the whole
+panel, including rows the model trained on. Rebuilt on strictly out-of-sample scores
+(`oos.py`), the honest figures are **49-day median lead** but only
+**38% caught early** — the lead is longer than we claimed, the hit rate lower.
+
+**The first policy backtest was measured wrong.** Comparing scorers at equal *merchant
+count* flatters any scorer that prefers large merchants, because it silently declines far
+more money for the same headcount. Rebuilt at equal *financed value declined*: SENTINEL
+captures 27.8% of bad financed value at a 20% decline budget vs
+27.1% for naive, winning 36/55 snapshots (p = 0.0021).
 
 **3. What finally beat it was shrinkage, not the model.** A merchant with six orders at a 33%
 bad rate is mostly noise. Empirical-Bayes shrinkage pulls each rate toward what that merchant's
@@ -90,6 +103,16 @@ column `financed_value` scored 0.858 on it. It was predicting merchant size, not
    tenure, holdback %*. CRITICAL suspends new financing; HIGH caps at 25% of current exposure,
    3-month tenure, 15% holdback; WATCH caps at 60%, 6-month tenure, 7% holdback.
 
+8. **Product risk engine** (`analytics.py`). 3,998 products scored, each shrunk toward its
+   own category, ranked by exposure at risk, with a delist / restrict / review action.
+
+9. **Seasonality and demand-shift detection.** Category share of platform volume is
+   deseasonalised *and* detrended against platform growth. 118 genuine consumer-behaviour
+   shocks detected, plus CUSUM-style volume breaks per merchant.
+
+10. **Drift monitoring.** Population Stability Index per feature between the training and live
+    eras, with the conventional 0.25 retrain line.
+
 ---
 
 ## Architecture
@@ -131,10 +154,14 @@ one dictionary swap.
 
 ```bash
 pip install -r requirements.txt
-bash get_data.sh          # pulls the 7 Olist tables into ./data
-python pipeline.py        # ~90s: builds panel, trains, scores, writes artifacts/
-uvicorn serve:app --port 8000   # risk register UI + scoring API  -> open http://localhost:8000
-streamlit run app.py            # optional analyst view
+bash get_data.sh              # only if ./data is missing
+python pipeline.py            # ~3 min: builds panel, trains, scores, writes artifacts/
+python oos.py                 # honest out-of-sample scoring + policy backtest
+python analytics.py           # product risk, seasonality, demand shifts, drift
+python finalize_metrics.py    # merges OOS & analytics into metrics.json (MUST be last)
+python export_web.py          # builds web/data.json
+uvicorn serve:app --port 8000 # risk register UI + scoring API -> open http://localhost:8000
+streamlit run app.py          # optional analyst view
 ```
 
 The UI is served at `/`, the API under `/score`, `/watchlist` and `/health`. Fonts are vendored
