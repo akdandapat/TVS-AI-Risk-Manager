@@ -35,8 +35,10 @@ def main():
     CONF = pd.read_parquet(f"{A}/panel_confidence.parquet")
     B = pickle.load(open(f"{A}/model.pkl", "rb"))
     SC, FEATS = B["scorer"], B["features"]
-    ADV = json.load(open(f"{A}/advanced_metrics.json")) if os.path.exists(f"{A}/advanced_metrics.json") else {}
-    LEVERS = json.load(open(f"{A}/levers.json")) if os.path.exists(f"{A}/levers.json") else {}
+    ADV = json.load(open(f"{A}/advanced_metrics.json"))
+    SURV = pd.read_csv(f"{A}/survival_curves.csv")
+    RULES = json.load(open(f"{A}/rules.json"))
+    LEV = json.load(open(f"{A}/levers.json"))
 
     from scorer import narrative
     PEER = S[FEATS].mean()
@@ -96,8 +98,8 @@ def main():
             "drivers": drivers,
             "memo": narrative(r.to_dict(), PEER),
             "levers": [{"f": lv["feature"], "cur": lv["current"],
-                         "tgt": lv["target"], "d": lv["delta"]}
-                        for lv in LEVERS.get(r.seller_id, [])],
+                        "tgt": lv["target"], "d": lv["score_drop"]}
+                       for lv in LEV.get(r.seller_id, {}).get("levers", [])],
         })
 
     cat = (OM.groupby("category").agg(
@@ -202,6 +204,10 @@ def main():
               .groupby("b", observed=True)],
         # ---- Part 6 additions ----
         "advanced": ADV,
+        "survival": [{"band": r.band, "t": int(r.t), "s": jnum(r.s, 4)}
+                     for r in SURV.itertuples()],
+        "rules": RULES["rules"][:8],
+        "rules_base": RULES["base_rate"], "rules_coverage": RULES["coverage"],
     }
     path = os.path.join(WEB, "data.json")
     json.dump(out, open(path, "w"), separators=(",", ":"), default=str)

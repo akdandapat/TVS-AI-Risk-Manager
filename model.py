@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-OUT = os.environ.get("SENTINEL_OUT", "/home/claude/sentinel/artifacts")
+OUT = os.environ.get("SENTINEL_OUT", "artifacts")
 
 DROP = {"seller_id", "snapshot", "category", "target", "date",
         "fut_bad", "fut_n", "fut_financed", "fut_bad_financed"}

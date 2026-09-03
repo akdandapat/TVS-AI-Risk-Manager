@@ -11,8 +11,8 @@ import pandas as pd
 from datetime import timedelta
 
 warnings.filterwarnings("ignore")
-DATA = os.environ.get("SENTINEL_DATA", "/home/claude/data")
-OUT = os.environ.get("SENTINEL_OUT", "/home/claude/sentinel/artifacts")
+DATA = os.environ.get("SENTINEL_DATA", "data")
+OUT = os.environ.get("SENTINEL_OUT", "artifacts")
 os.makedirs(OUT, exist_ok=True)
 
 LATE_TOLERANCE_DAYS = 5

@@ -61,6 +61,22 @@ Every score carries a 95% interval derived from the binomial standard error of t
 | **Medium** | 33 | **0.6495** | 0.6494 | +0.0001 |
 | **Large** | 85 | **0.6903** | 0.6836 | +0.0067 |
 
+### Assurance — survival by risk band
+
+Kaplan-Meier from first entry into a band to actual deterioration. Monotonic.
+
+| Band | Merchants | Median days to deterioration | Failed by 90d |
+|---|---|---|---|
+| **CRITICAL** | 55 | **28 days** | 68.9% |
+| **HIGH** | 218 | **42 days** | 66.4% |
+| **WATCH** | 313 | **63 days** | 59.6% |
+| **HEALTHY** | 498 | **98 days** | 46.9% |
+
+Stripping every merchant-manipulable feature (reviews, complaint text, catalogue
+copy) and retraining on the 30 non-manipulable features retains **95.3%** of
+performance (0.6043 vs 0.6343). A dealer who buys five-star reviews does
+not escape this score - the delivery record still convicts them.
+
 ### Read this before you read the numbers
 
 Three findings shaped this project more than any modelling choice.
@@ -112,9 +128,9 @@ population. We display intervals for transparency but score 100% of eligible mer
    defined as: `order_status` in (canceled, unavailable) **OR** delivered >5 days past the
    promised date **OR** review score ≤ 2. Portfolio bad-order rate = 15.2%.
 
-2. **Rolling seller panel.** Every 14 days, aggregate each merchant's trailing 90 days into
-   45 features; the target is whether their *next 30 days* exceed a 25% bad-order rate.
-   5,778 merchant-snapshots across 613 merchants with enough volume to score.
+2. **Rolling seller panel.** Every 7 days, aggregate each merchant's trailing 90 days into 47 features;
+   the target is whether their next 30 days exceed a 25% bad-order rate.
+   11,543 merchant-snapshots across 645 merchants with enough volume to score.
 
 3. **Feature families** — fulfilment (approval lag, carrier lag, delay p90), returns
    (cancel rate), feedback (review score, review coverage), **complaint NLP** (Portuguese
@@ -166,7 +182,7 @@ population. We display intervals for transparency but score 100% of eligible mer
                                        ↓
                     ACTION LAYER: exposure cap · tenure cap · holdback
                                        ↓
-                     Streamlit command centre + exportable action file
+                     Risk register UI (7 views) + scoring API + exportable action file
 ```
 
 ---
@@ -198,6 +214,7 @@ python pipeline.py            # ~3 min: builds panel, trains, scores, writes art
 python oos.py                 # honest out-of-sample scoring + policy backtest
 python analytics.py           # product risk, seasonality, demand shifts, drift
 python depth.py               # uncertainty intervals, multi-horizon (30/60/90d), segment stability
+python advanced.py            # survival, gaming resistance, rules, levers
 python finalize_metrics.py    # merges OOS & analytics into metrics.json (MUST be last)
 python export_web.py          # builds web/data.json
 uvicorn serve:app --port 8000 # risk register UI + scoring API -> open http://localhost:8000
@@ -211,9 +228,7 @@ locally and all charts are hand-rolled SVG, so the demo needs **no internet conn
 approved limit, max tenure, holdback, an APPROVE/REFER/DECLINE decision and the written
 memo. `GET /watchlist?band=HIGH` returns the review queue. `GET /health` for liveness.
 
-Dashboard views: Command Centre · Merchant Deep-Dive (SHAP + trajectory) ·
-Early-Warning Alerts (exportable CSV) · Collusion Graph · Product & Category Risk ·
-Model Validation.
+UI views: Portfolio | Watchlist | Merchant file | Products | Categories & seasons | Network | Evidence
 
 ---
 

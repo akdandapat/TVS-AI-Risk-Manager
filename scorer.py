@@ -5,7 +5,7 @@ import pandas as pd
 import warnings
 warnings.filterwarnings("ignore")
 
-OUT = os.environ.get("SENTINEL_OUT", "/home/claude/sentinel/artifacts")
+OUT = os.environ.get("SENTINEL_OUT", "artifacts")
 CFG = dict(n_estimators=400, learning_rate=0.04, num_leaves=15, min_child_samples=40,
            subsample=0.8, colsample_bytree=0.6, reg_lambda=5.0)
 W_MODEL = 0.30   # 0.30 model + 0.70 empirical-Bayes rate. Every weight in 0.2-0.5

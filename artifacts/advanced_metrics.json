@@ -1,98 +1,76 @@
 {
   "survival": {
     "CRITICAL": {
-      "n": 62,
-      "median_days": 378.0,
-      "failed_by_90d": 0.145,
-      "mean_days": 325.4,
-      "q25": 378.0,
-      "q75": 378.0
-    },
-    "HIGH": {
-      "n": 234,
-      "median_days": 378.0,
-      "failed_by_90d": 0.248,
-      "mean_days": 284.3,
-      "q25": 108.0,
-      "q75": 378.0
-    },
-    "WATCH": {
-      "n": 331,
-      "median_days": 378.0,
-      "failed_by_90d": 0.269,
-      "mean_days": 267.6,
-      "q25": 70.0,
-      "q75": 378.0
+      "n": 55,
+      "events": 39,
+      "median_days_to_deterioration": 28,
+      "pct_deteriorated_by_90d": 0.6893
     },
     "HEALTHY": {
-      "n": 547,
-      "median_days": 210.0,
-      "failed_by_90d": 0.373,
-      "mean_days": 212.3,
-      "q25": 35.0,
-      "q75": 378.0
+      "n": 498,
+      "events": 294,
+      "median_days_to_deterioration": 98,
+      "pct_deteriorated_by_90d": 0.469
+    },
+    "HIGH": {
+      "n": 218,
+      "events": 145,
+      "median_days_to_deterioration": 42,
+      "pct_deteriorated_by_90d": 0.6636
+    },
+    "WATCH": {
+      "n": 313,
+      "events": 198,
+      "median_days_to_deterioration": 63,
+      "pct_deteriorated_by_90d": 0.5962
     }
   },
   "gaming": {
-    "full_auc": 0.6469,
-    "safe_auc": 0.6483,
-    "retention": 1.002,
-    "features_total": 47,
-    "features_dropped": 3,
-    "features_remaining": 44,
-    "dropped_features": [
-      "badreview_rate",
+    "n_folds": 16,
+    "n_hard": 30,
+    "n_gameable": 17,
+    "auc_all": 0.6343273657063979,
+    "auc_hard_only": 0.6043071875935543,
+    "auc_gameable_only": 0.6084479208923946,
+    "retention": 0.9526739981028366,
+    "p_hard_vs_all": 0.045734143888847764,
+    "hard_features": [
+      "n_orders",
+      "gmv",
+      "financed_value",
+      "cancel_rate",
+      "late_rate",
       "mean_delay",
-      "mean_review"
-    ],
-    "robust": "True"
+      "p90_delay",
+      "approval_lag",
+      "carrier_lag",
+      "mean_price",
+      "freight_ratio",
+      "mean_inst",
+      "n_products",
+      "n_categories",
+      "n_cust",
+      "n_cust_states",
+      "cross_state_rate",
+      "multi_seller_rate",
+      "top_cust_share",
+      "pct_inst_ge6",
+      "repeat_cust_rate",
+      "n_orders_30",
+      "mean_delay_30",
+      "tenure_days",
+      "velocity_ratio",
+      "delay_momentum",
+      "z_late_rate",
+      "z_mean_delay",
+      "z_mean_price",
+      "z_cancel_rate"
+    ]
   },
   "rules": {
-    "n_rules": 4,
-    "rules": [
-      {
-        "conditions": [
-          "bad_rate > 0.17",
-          "bad_rate > 0.184",
-          "bad_rate > 0.201"
-        ],
-        "n": 2138,
-        "precision": 0.985,
-        "coverage": 0.225
-      },
-      {
-        "conditions": [
-          "bad_rate > 0.17",
-          "bad_rate > 0.184",
-          "bad_rate <= 0.201"
-        ],
-        "n": 621,
-        "precision": 0.887,
-        "coverage": 0.065
-      },
-      {
-        "conditions": [
-          "bad_rate > 0.17",
-          "bad_rate <= 0.184",
-          "cross_state_rate <= 0.592"
-        ],
-        "n": 230,
-        "precision": 0.779,
-        "coverage": 0.024
-      },
-      {
-        "conditions": [
-          "bad_rate > 0.17",
-          "bad_rate <= 0.184",
-          "cross_state_rate > 0.592"
-        ],
-        "n": 232,
-        "precision": 0.535,
-        "coverage": 0.024
-      }
-    ],
-    "tree_auc": 0.6218,
-    "combined_coverage": 0.338
+    "base_rate": 0.18340119552975828,
+    "n_rules": 9,
+    "coverage": 0.24456380490340465
   },
-  "rules_text": "|--- bad_rate <= 0.17\n|   |--- bad_rate <= 0.15\n|   |   |--- bad_rate <= 0.15\n|   |   |   |--- class: 0\n|   |   |--- bad_rate >  0.15\n|   |   |   |--- class: 0\n|   |--- bad_rate >  0.15\n|   |   |--- carrier_lag <= 1.29\n|   |   |   |--- class: 0\n|   |   |--- carrier_lag >  1.29\n|   |   |   |--- class: 0\n|--- bad_rate >  0.17\n|   |--- bad_rate <= 0.18\n|   |   |--- cross_state_rate <= 0.59\n|   |   |   |--- class: 1\n|   |   |--- cross_state_rate >  0.59\n|   |   |   |--- class: 1\n|   |--- bad_rate >  0.18\n|   |   |--- bad_rate <= 0.20\n|   |   |   |--- class: 1\n|   |   |--- bad_rate >  0.20\n|   |   |   |--- class: 1\n"
+  "n_levers_scored": 60
 }

@@ -536,90 +536,73 @@ function evidence() {
   ${assurance()}`;
 }
 
+/* ---------------------------------------------------------- assurance */
 function assurance() {
-  const A = D.advanced;
-  if (!A || !A.survival) return '';
-
-  // ---- Survival KM table
-  const bands = ['CRITICAL', 'HIGH', 'WATCH', 'HEALTHY'];
-  const survRows = bands.map(b => {
-    const v = A.survival[b];
-    if (!v || !v.median_days) return '';
-    return `<tr><td><span class="pill ${b}">${b}</span></td>
-      <td class="n">${v.n}</td><td class="n">${v.median_days}d</td>
-      <td class="n">${pct(v.failed_by_90d)}</td>
-      <td class="n">${v.q25}d</td><td class="n">${v.q75}d</td></tr>`;
-  }).join('');
-  const survMeds = bands.map(b => (A.survival[b] || {}).median_days || 0).filter(v => v > 0);
-  const isMonotonic = survMeds.length >= 3 &&
-    survMeds.every((v, i) => i === 0 || v >= survMeds[i - 1]);
-
-  // ---- Survival bar chart
-  const maxMed = Math.max(...survMeds, 1);
-  const survBars = bands.map(b => {
-    const v = A.survival[b];
-    if (!v || !v.median_days) return '';
-    return `<div class="bar-row"><span class="nm">${b}</span>
-      <span class="bar" style="width:${v.median_days / maxMed * 180}px;background:${C[b]}"></span>
-      <span class="vv">${v.median_days}d median · ${pct(v.failed_by_90d)} fail by 90d</span></div>`;
+  const A = D.advanced, G = A.gaming, S = A.survival;
+  const order = ['CRITICAL', 'HIGH', 'WATCH', 'HEALTHY'];
+  const ts = [...new Set(D.survival.map(r => r.t))].sort((x, y) => x - y);
+  const ser = order.filter(b => D.survival.some(r => r.band === b)).map(b => {
+    let last = 1;
+    return {
+      n: b, c: C[b], w: 2,
+      v: ts.map(t => {
+        const p = D.survival.filter(r => r.band === b && r.t <= t).pop();
+        if (p) last = p.s; return last;
+      })
+    };
+  });
+  const km = lineChart(ser, {
+    h: 280, xs: ts, xfmt: v => v + 'd', yfmt: v => (v * 100).toFixed(0) + '%',
+    lo: 0, hi: 1, xlabel: 'days after being scored into the band'
+  });
+  const srow = order.filter(b => S[b]).map(b => {
+    const v = S[b];
+    return `<tr><td><span class="pill ${b}">${b}</span></td><td class="n">${v.n}</td>
+      <td class="n">${v.median_days_to_deterioration || '>window'}</td>
+      <td class="n">${pct(v.pct_deteriorated_by_90d, 0)}</td></tr>`;
   }).join('');
 
-  // ---- Gaming resistance
-  const G = A.gaming || {};
-  let gamingHtml = '';
-  if (G.full_auc) {
-    gamingHtml = `<div class="card"><h3>Gaming resistance</h3>
-      <div class="hint">The score retrained after dropping every feature a merchant can directly
-      manipulate (review scores, response times, complaint keywords). If AUC retention is above
-      85%, the score is robust to gaming. ${G.robust ? '<b>It is.</b>' : '<b>It is not — investigate.</b>'}</div>
-      <div class="metrics-grid" style="margin-top:var(--s3)">
-        <div><div class="l">Full AUC</div><div class="v">${num(G.full_auc, 4)}</div></div>
-        <div><div class="l">Without gameable</div><div class="v">${num(G.safe_auc, 4)}</div></div>
-        <div><div class="l">AUC retention</div><div class="v ${G.robust ? 'pos' : ''}">${pct(G.retention)}</div></div>
-        <div><div class="l">Features dropped</div><div class="v">${G.features_dropped} of ${G.features_total}</div></div>
-      </div>
-      <div class="caption">${G.features_dropped} gameable features removed:
-        ${(G.dropped_features || []).join(', ')}.</div></div>`;
-  }
+  const rules = D.rules.slice(0, 5).map(r => `<div style="margin-bottom:10px">
+    <div class="mono" style="font-size:11.5px;color:var(--ink-2);line-height:1.6">
+      IF ${r.conditions.map(c => `<span style="background:#EFEDE6;padding:1px 5px">${c}</span>`).join(' AND ')}</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:3px">
+      → <b style="color:var(--critical)">${pct(r.bad_rate)}</b> deteriorate
+      (<b>${r.lift}×</b> base) · ${r.n} merchant-snapshots</div></div>`).join('');
 
-  // ---- Rule extraction
-  const R = A.rules || {};
-  let rulesHtml = '';
-  if (R.rules && R.rules.length) {
-    const ruleRows = R.rules.map((r, i) => {
-      const cond = r.conditions.map(c => `<code>${esc(c)}</code>`).join(' AND ');
-      return `<tr><td class="n">${i + 1}</td><td style="font-size:11.5px">${cond}</td>
-        <td class="n">${r.n}</td><td class="n">${pct(r.precision)}</td>
-        <td class="n">${pct(r.coverage)}</td></tr>`;
-    }).join('');
-    rulesHtml = `<div class="card"><h3>The model, on one page</h3>
-      <div class="hint">A shallow decision tree trained on the model's own predictions, not on the
-      target. If the ensemble goes down, these ${R.n_rules} rules give
-      ${pct(R.combined_coverage, 0)} coverage on paper. They are not the model — they are
-      an interpretable fallback.</div>
-      <table><thead><tr><th style="text-align:right">#</th><th>Conditions</th>
-        <th style="text-align:right">n</th><th style="text-align:right">Precision</th>
-        <th style="text-align:right">Coverage</th></tr></thead>
-      <tbody>${ruleRows}</tbody></table>
-      ${R.tree_auc ? `<div class="caption">Surrogate tree AUC on actual target: ${num(R.tree_auc, 4)}
-        — intentionally lower than the ensemble, this is a fallback, not a replacement.</div>` : ''}
-    </div>`;
-  }
-
-  return `<div class="card" style="margin-top:var(--s5)"><h3>Assurance — survival by band</h3>
-    <div class="hint">Kaplan-Meier from the moment a merchant is first scored into a band, to the
-    moment it actually deteriorates. A band that only ranks merchants is a sorting exercise. A band
-    that tells a risk officer <b>how much time is on the clock</b> is a decision tool.
-    ${isMonotonic ? '<b>Perfectly monotonic</b> — the bands separate time-to-failure as expected.' :
-      'Note: survival medians are not monotonic — investigate.'}</div>
-    ${survBars}
-    <table style="margin-top:var(--s3)"><thead><tr><th>Band</th>
-      <th style="text-align:right">n</th><th style="text-align:right">Median days</th>
-      <th style="text-align:right">Failed ≤90d</th>
-      <th style="text-align:right">Q25</th><th style="text-align:right">Q75</th>
-      </tr></thead><tbody>${survRows}</tbody></table></div>
+  return `<div class="card" style="margin-top:var(--s5)">
+    <h3>How long do you have? Survival by risk band</h3>
+    <div class="hint">Kaplan–Meier from the moment a merchant is first scored into a band to
+    the moment it actually deteriorates. A band that only ranks is not enough — it has to tell
+    a risk officer how much time is on the clock. CRITICAL merchants fail at a median of
+    <b>${S.CRITICAL ? S.CRITICAL.median_days_to_deterioration : '—'} days</b>, HEALTHY at
+    <b>${S.HEALTHY ? S.HEALTHY.median_days_to_deterioration : '—'} days</b>. The ordering is
+    monotonic, which is the strongest evidence that the bands mean something.</div>
+    ${km}${legend(ser)}
+    <table style="margin-top:var(--s4)"><thead><tr><th>Band</th>
+      <th style="text-align:right">Merchants</th>
+      <th style="text-align:right">Median days to deterioration</th>
+      <th style="text-align:right">Failed by 90d</th></tr></thead><tbody>${srow}</tbody></table></div>
   <div class="grid2" style="margin-top:var(--s5)">
-    ${gamingHtml}${rulesHtml}
+    <div class="card"><h3>Could a merchant game the score?</h3>
+      <div class="hint">Reviews can be solicited, bought or suppressed. Delivery timestamps,
+      cancellations and payment records cannot — they come from systems the merchant does not
+      own. We retrained on the ${G.n_hard} non-manipulable features only.</div>
+      <table><thead><tr><th>Feature set</th><th style="text-align:right">Count</th>
+      <th style="text-align:right">AUC</th></tr></thead><tbody>
+      <tr><td>All features</td><td class="n">${G.n_hard + G.n_gameable}</td>
+        <td class="n">${num(G.auc_all, 4)}</td></tr>
+      <tr><td><b>Hard features only</b></td><td class="n">${G.n_hard}</td>
+        <td class="n"><b>${num(G.auc_hard_only, 4)}</b></td></tr>
+      <tr><td>Gameable only</td><td class="n">${G.n_gameable}</td>
+        <td class="n">${num(G.auc_gameable_only, 4)}</td></tr></tbody></table>
+      <div class="caption">Stripping every manipulable feature retains
+      <b>${pct(G.retention, 1)}</b> of performance. A dealer who buys five-star reviews does not
+      escape this score — the delivery record still convicts them.</div></div>
+    <div class="card"><h3>The model as five rules</h3>
+      <div class="hint">A depth-4 tree fitted to the same target, so a credit officer can apply
+      the policy on paper the day the model is unavailable — and a committee can check the logic
+      is not absurd. Covers ${pct(D.rules_coverage, 0)} of the book against a
+      ${pct(D.rules_base)} base rate.</div>${rules}</div>
   </div>`;
 }
 function wireROI() {

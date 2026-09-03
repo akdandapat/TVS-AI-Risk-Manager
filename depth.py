@@ -12,9 +12,7 @@ import pandas as pd
 from datetime import timedelta
 from sklearn.metrics import roc_auc_score
 
-OUT = os.environ.get("SENTINEL_OUT", "artifacts" if os.path.exists("artifacts") else "/home/claude/sentinel/artifacts")
-if not os.path.exists(OUT) and os.path.exists("artifacts"):
-    OUT = "artifacts"
+OUT = os.environ.get("SENTINEL_OUT", "artifacts")
 BANDS = [(0.95, "CRITICAL"), (0.85, "HIGH"), (0.70, "WATCH"), (0.0, "HEALTHY")]
 Z = 1.96
 

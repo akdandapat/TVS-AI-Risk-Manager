@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 
-OUT = os.environ.get("SENTINEL_OUT", "/home/claude/sentinel/artifacts")
+OUT = os.environ.get("SENTINEL_OUT", "artifacts")
 EB_K_PRODUCT = 8
 
 

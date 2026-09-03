@@ -9,7 +9,7 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 
-OUT = os.environ.get("SENTINEL_OUT", "/home/claude/sentinel/artifacts")
+OUT = os.environ.get("SENTINEL_OUT", "artifacts")
 from scorer import CFG, W_MODEL, eb_shrink, _fit_ensemble
 
 DROP = {"seller_id", "snapshot", "category", "target", "date",

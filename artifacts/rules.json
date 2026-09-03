@@ -1,0 +1,105 @@
+{
+  "base_rate": 0.1834,
+  "rules": [
+    {
+      "conditions": [
+        "resid_bad > 0.0415",
+        "mean_review <= 3.5392",
+        "carrier_lag > 3.7363",
+        "cx_wrong_item > 0.0248"
+      ],
+      "n": 120,
+      "bad_rate": 0.75,
+      "lift": 4.09
+    },
+    {
+      "conditions": [
+        "resid_bad > 0.0415",
+        "mean_review <= 3.5392",
+        "carrier_lag <= 3.7363",
+        "review_cov <= 0.9971"
+      ],
+      "n": 170,
+      "bad_rate": 0.4588,
+      "lift": 2.5
+    },
+    {
+      "conditions": [
+        "resid_bad > 0.0415",
+        "mean_review <= 3.5392",
+        "carrier_lag > 3.7363",
+        "cx_wrong_item <= 0.0248"
+      ],
+      "n": 151,
+      "bad_rate": 0.4437,
+      "lift": 2.42
+    },
+    {
+      "conditions": [
+        "resid_bad > 0.0415",
+        "mean_review > 3.5392",
+        "carrier_lag > 1.2835",
+        "late_rate <= 0.0301"
+      ],
+      "n": 447,
+      "bad_rate": 0.396,
+      "lift": 2.16
+    },
+    {
+      "conditions": [
+        "resid_bad > 0.0415",
+        "mean_review > 3.5392",
+        "carrier_lag <= 1.2835",
+        "photos_qty <= 1.2225"
+      ],
+      "n": 198,
+      "bad_rate": 0.3081,
+      "lift": 1.68
+    },
+    {
+      "conditions": [
+        "resid_bad > 0.0415",
+        "mean_review <= 3.5392",
+        "carrier_lag <= 3.7363",
+        "review_cov > 0.9971"
+      ],
+      "n": 306,
+      "bad_rate": 0.2974,
+      "lift": 1.62
+    },
+    {
+      "conditions": [
+        "resid_bad <= 0.0415",
+        "carrier_lag > 1.1217",
+        "n_orders > 58.5",
+        "tenure_days > 475.5"
+      ],
+      "n": 135,
+      "bad_rate": 0.2889,
+      "lift": 1.58
+    },
+    {
+      "conditions": [
+        "resid_bad > 0.0415",
+        "mean_review > 3.5392",
+        "carrier_lag > 1.2835",
+        "late_rate > 0.0301"
+      ],
+      "n": 1185,
+      "bad_rate": 0.2641,
+      "lift": 1.44
+    },
+    {
+      "conditions": [
+        "resid_bad <= 0.0415",
+        "carrier_lag <= 1.1217",
+        "cx_late > 0.1656",
+        "bad_momentum > 0.0089"
+      ],
+      "n": 111,
+      "bad_rate": 0.2613,
+      "lift": 1.42
+    }
+  ],
+  "coverage": 0.2446
+}
