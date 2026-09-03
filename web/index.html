@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SENTINEL — Merchant Risk Register</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<nav class="rail">
+  <div class="brand">
+    <h1>Sentinel</h1>
+    <div class="sub">Merchant risk register</div>
+  </div>
+  <div class="nav" id="nav"></div>
+  <div class="rail-foot">
+    <div>Book under watch</div>
+    <div class="k" id="foot-exposure">—</div>
+    <div style="margin-top:10px">Median warning</div>
+    <div class="k" id="foot-lead">—</div>
+    <div style="margin-top:10px" id="foot-gen"></div>
+  </div>
+</nav>
+
+<main>
+  <div class="head">
+    <div>
+      <div class="eyebrow" id="crumb">Portfolio</div>
+      <h2 id="title">Loading</h2>
+    </div>
+    <div class="note" id="note"></div>
+  </div>
+
+  <section class="view on" id="v-portfolio"></section>
+  <section class="view" id="v-watchlist"></section>
+  <section class="view" id="v-merchant"></section>
+  <section class="view" id="v-evidence"></section>
+  <section class="view" id="v-network"></section>
+  <section class="view" id="v-categories"></section>
+</main>
+
+<div class="tip" id="tip"></div>
+<script src="app.js"></script>
+</body>
+</html>
