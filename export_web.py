@@ -31,11 +31,15 @@ def main():
     SI = pd.read_csv(f"{A}/seasonal_index.csv")
     VB = pd.read_csv(f"{A}/volume_breaks.csv")
     DR = pd.read_csv(f"{A}/drift.csv")
+    DEPTH = json.load(open(f"{A}/depth_metrics.json"))
+    CONF = pd.read_parquet(f"{A}/panel_confidence.parquet")
     B = pickle.load(open(f"{A}/model.pkl", "rb"))
     SC, FEATS = B["scorer"], B["features"]
 
     from scorer import narrative
     PEER = S[FEATS].mean()
+    _cl = CONF[CONF.snapshot == CONF.snapshot.max()]
+    CONF_LATEST = {r.seller_id: (r.score_lo, r.score_hi) for r in _cl.itertuples()}
 
     # ---- score every historical snapshot so we can draw risk trajectories
     P = P.sort_values(["seller_id", "snapshot"]).copy()
@@ -83,6 +87,8 @@ def main():
             "tenure_cap": int(r.max_tenure_months), "holdback": jnum(r.holdback_pct, 3),
             "rec": r.recommendation, "category": str(r.category),
             "cx": {k[3:]: jnum(r[k], 3) for k in S.columns if k.startswith("cx_")},
+            "score_lo": jnum(CONF_LATEST.get(r.seller_id, (None, None))[0], 3),
+            "score_hi": jnum(CONF_LATEST.get(r.seller_id, (None, None))[1], 3),
             "traj": traj, "first_flag": first_flag, "first_bad": first_bad,
             "lead": lead,
             "drivers": drivers,
@@ -178,6 +184,17 @@ def main():
                           for r in VB.head(50).itertuples()],
         "drift": [{"f": r.feature, "psi": jnum(r.psi, 4), "status": r.status}
                   for r in DR.itertuples()],
+
+        # ---- Part 3 additions ----
+        "depth": DEPTH,
+        "conf_by_volume": [
+            {"bucket": str(b), "n": int(len(g)),
+             "width": jnum(g.score_width.mean(), 3),
+             "orders": jnum(g.n_orders.median(), 0)}
+            for b, g in CONF.assign(
+                b=pd.cut(CONF.n_orders, [0, 10, 20, 40, 80, 1e9],
+                         labels=["5-10", "11-20", "21-40", "41-80", "80+"]))
+              .groupby("b", observed=True)],
     }
     path = os.path.join(WEB, "data.json")
     json.dump(out, open(path, "w"), separators=(",", ":"), default=str)

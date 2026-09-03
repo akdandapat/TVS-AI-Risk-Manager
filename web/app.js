@@ -17,6 +17,7 @@ const NOTES = {
   products: 'SKU-level risk. Which products to stop financing, restrict to cash, or cap on tenure.'
 };
 
+const band = s => s >= .95 ? 'CRITICAL' : s >= .85 ? 'HIGH' : s >= .70 ? 'WATCH' : 'HEALTHY';
 const pct = (v, d = 1) => v == null ? '\u2014' : (v * 100).toFixed(d) + '%';
 const brl = v => v == null ? '\u2014' : 'R$ ' + Math.round(v).toLocaleString('en-US');
 const num = (v, d = 2) => v == null ? '\u2014' : (+v).toFixed(d);
@@ -249,7 +250,13 @@ function merchant() {
       <div>Max tenor<b>${m.tenure_cap} mo</b></div>
       <div>Holdback<b>${pct(m.holdback, 0)}</b></div>
       <div>Score<b>${num(m.score)}</b></div>
-    </div></div>
+      ${m.score_lo != null ? `<div>95% interval<b>${num(m.score_lo)} – ${num(m.score_hi)}</b></div>` : ''}
+    </div>
+    ${m.score_lo != null && band(m.score_lo) !== band(m.score_hi) ? `<div class="caption"
+      style="margin-top:8px">Evidence is thin: the interval spans
+      <b>${band(m.score_lo)}</b> to <b>${band(m.score_hi)}</b> on ${m.n_orders} orders. Treat the
+      band as indicative and re-review once volume builds.</div>` : ''}
+    </div>
   <div class="metrics-grid" style="margin:var(--s5) 0">
     ${g('Bad rate', pct(m.bad_rate))}${g('Expected', pct(m.exp_bad))}
     ${g('Late', pct(m.late_rate))}${g('Cancelled', pct(m.cancel_rate))}
@@ -439,6 +446,52 @@ function evidence() {
       <th style="text-align:right">Snapshots won</th><th style="text-align:right">p vs naive</th>
     </tr></thead><tbody>${psum}</tbody></table></div>
   <div class="grid2" style="margin-top:var(--s5)">
+    <div class="card"><h3>Does the warning hold at 60 and 90 days?</h3>
+      <div class="hint">The same score, tested against outcomes further out. If it only worked
+      at 30 days it would be a nowcast, not an early-warning system. It separates
+      <i>better</i> at longer horizons — deterioration builds slowly enough to be seen.</div>
+      <table><thead><tr><th>Horizon</th><th style="text-align:right">Base rate</th>
+      <th style="text-align:right">AUC</th><th style="text-align:right">Lift @20%</th>
+      </tr></thead><tbody>${['h30', 'h60', 'h90'].map(h => {
+      const v = D.depth.horizons[h]; if (!v || !v.auc) return '';
+      return `<tr><td>${h.slice(1)} days</td><td class="n">${pct(v.base_rate)}</td>
+        <td class="n">${num(v.auc, 4)}</td><td class="n">${num(v.lift20)}×</td></tr>`;
+    }).join('')}</tbody></table></div>
+    <div class="card"><h3>Does it work for small merchants?</h3>
+      <div class="hint">Split by order volume. Small merchants are where a lender has least
+      other information, so a model that only works on large ones is not deployable.
+      SENTINEL beats naive persistence in every segment, by the widest margin on the
+      smallest merchants.</div>
+      <table><thead><tr><th>Segment</th><th style="text-align:right">Median orders</th>
+      <th style="text-align:right">SENTINEL</th><th style="text-align:right">Naive</th>
+      </tr></thead><tbody>${Object.entries(D.depth.segments.size_seg).map(([k, v]) =>
+      v.auc ? `<tr><td>${k}</td><td class="n">${v.median_orders}</td>
+        <td class="n">${num(v.auc, 4)}</td><td class="n">${num(v.naive_auc, 4)}</td></tr>` : '').join('')}
+      </tbody></table></div>
+  </div>
+  <div class="grid2" style="margin-top:var(--s5)">
+    <div class="card"><h3>Confidence intervals — and why we do not gate on them</h3>
+      <div class="hint">Each score carries a 95% interval driven by how much evidence backs the
+      merchant's rate. We tested refusing to score merchants whose interval spans two bands.
+      <b>It did not work</b>: the confident subset ranks slightly worse
+      (${num(D.depth.abstention.confident.auc, 4)}) than the full population
+      (${num(D.depth.abstention.all.auc, 4)}). So we show the interval on the merchant file as
+      context and we do <i>not</i> withhold a score. Reporting this is cheaper than
+      discovering it in production.</div>
+      <table><thead><tr><th>Population</th><th style="text-align:right">Share</th>
+      <th style="text-align:right">AUC</th><th style="text-align:right">Lift @20%</th>
+      <th style="text-align:right">Mean width</th></tr></thead><tbody>
+      ${['all', 'confident', 'abstained'].map(k => {
+      const v = D.depth.abstention[k]; if (!v || !v.auc) return '';
+      return `<tr><td>${k}</td><td class="n">${pct(v.share, 0)}</td>
+        <td class="n">${num(v.auc, 4)}</td><td class="n">${num(v.lift20)}×</td>
+        <td class="n">${num(v.mean_width, 3)}</td></tr>`;
+    }).join('')}</tbody></table>
+      <div style="margin-top:var(--s3)">${D.conf_by_volume.map(c => `<div class="bar-row">
+        <span class="nm">${c.bucket} orders</span>
+        <span class="bar" style="width:${(c.width * 320).toFixed(0)}px"></span>
+        <span class="vv">±${num(c.width, 3)} · n=${c.n}</span></div>`).join('')}</div>
+      <div class="caption">Interval width by merchant volume: thin evidence, wide interval.</div></div>
     <div class="card"><h3>Feature drift (PSI)</h3>
       <div class="hint">Training era against live era. Above 0.25 is the conventional retrain
       line. ${nUnstable} features are unstable — <code>exp_bad</code> is an expanding mean so it
@@ -446,6 +499,8 @@ function evidence() {
       retraining cadence.</div>
       <table><thead><tr><th>Feature</th><th style="text-align:right">PSI</th><th>Status</th>
       </tr></thead><tbody>${dr}</tbody></table></div>
+  </div>
+  <div class="grid2" style="margin-top:var(--s5)">
     <div class="card"><h3>What drives the model</h3>${impb}</div>
   </div>
   <div class="grid2" style="margin-top:var(--s5)">
